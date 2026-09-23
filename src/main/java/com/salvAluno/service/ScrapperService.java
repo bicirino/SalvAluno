@@ -1,6 +1,7 @@
-// Este código será responsável por fazer o scrapping de dados da página da faculdade e extrair os dados 
-
 package com.salvAluno.service; 
+
+
+// Este código será responsável por fazer o scrapping de dados da página da faculdade e extrair os dados 
 
 // Importações necessárias para o funcionamento do serviço de scrapping
 import com.microsoft.playwright.Browser;
@@ -59,34 +60,72 @@ public class ScrapperService {
                 System.out.println("[Playwright] Acessando a página de login: " + portalUrl);
                 page.navigate(portalUrl); 
 
-                page.fill("RA ou Email ou CPF", RA); 
-                page.fill("Senha", password); 
+                page.fill("#coAcesso", RA); 
+                page.fill("#coSenha", password); 
 
-                page.click ("button[type='submit']");
+                page.click ("#btn-login");
                 page.waitForLoadState(); 
 
                 System.out.println("[Playwright] Login realizado com sucesso");
 
                 page.navigate("https://salaonline.ceub.br/my/"); 
+                page.waitForLoadState(); 
                 
                 List<Task> tarefasEncontradas = new ArrayList<>(); 
 
-                var elementos = page.querySelectorAll(".item-tarefa"); 
+                // Encontra todos os links das matérias
+                List<ElementsHandle> linksMaterias = page.querySelectorAll("a[href*='course/view.php']"); 
 
-                for (var element : elementos) {
-                    String title = element.querySelector(".titulo").innerText();
-                    String subject = element.querySelector(".disciplina").innerText();
+                // Cria uma lista para armazenar as URLs das matérias encontradas
+                List<String> urlsMaterias = new ArrayList<>(); 
 
-                    Task task = new Task(title, subject, LocalDataTime.now().plusDays(7), "http://salaonline.ceunb.br/my/"); 
-                    tarefasEncontradas.add(task); 
+                // Itera sobre os links encontrados e adiciona as URLs únicas à lista 
+                for (ElementHandle link : linksMaterias){ 
+                    String url = link.getAttribute("href");
+                    
+                    if (url != null && !urlsMaterias.contains(url)){ 
+                        urlsMaterias.add(url);
+                    }
                 }
 
-                if (tarefasEncontradas.isEmpty()) { 
-                    System.out.println("[Playwright] Nenhuma tarefa encontrada."); 
+                System.out.println("[Playwright] Matérias encontradas: " + urlsMaterias.size());
+
+                // Loop para entrar em cada matéria e varrer as atividades/tarefas 
+                for (String urlMateria : urlsMaterias){ 
+                    page.navigate(urlMateria); 
+                    page.waitForLoadState(); 
+
+                    // Obter o nome da disciplina na página atual 
+                    String nomeMateria = "Disciplina"; 
+                    if (page.querySelector("h1") != null ){ 
+                        nomeMateria = page.querySelector("name-course").innerText(); 
+                    }
+                    
+                    // Cria uma lista para armazenar as atividades encontradas na matéria atual 
+                    List <ElementsHandle> atividades = page.querySelectorAll("a[href*='mod/assign/view.php']");
+
+                    for (ElementHandle atividade : atividades){ 
+                        String tituloAtividade = atividadeLink.innerText().trim();
+                        String urlAtividade = atividadeLink.getAttribute("href"); 
+                        
+                        if (!tituloAtividade.isEmpty() && urlAtividade != null){ 
+
+                            System.out.println("[Playwright] Atividade encontrada: " + tituloAtividade + " - " + urlAtividade);
+
+                            Task task = new Task(tituloAtividade, nomeMateria, dataPrazo, urlAtividade);
+                            tarefasEncontradas.add(task); 
+                        }
+                    }
+                }
+
+                if (tarefasEncontradas.isEmpty()){ 
+                    System.out.println("[Playwright] Nenhuma tarefa encontrada"); 
                 } else { 
-                    System.out.println("[Playwright] Tarefas encontradas: " + tarefasEncontradas.size()); 
-                    taskRepository.saveAll(tarefasEncontradas); 
+                    taskRepository.saveAll(tarefasEncontradas);
+
+                    System.out.println("[Playwright] Tarefas armazenadas: " + tarefasEncontradas.size());
                 }
+
 
             }catch (Exception e) { 
                 System.err.println("Erro ao preencher os campos de login: " + e.getMessage()); 
