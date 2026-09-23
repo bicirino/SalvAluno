@@ -61,8 +61,38 @@ public class ScrapperService {
 
                 page.fill("RA ou Email ou CPF", RA); 
                 page.fill("Senha", password); 
+
+                page.click ("button[type='submit']");
+                page.waitForLoadState(); 
+
+                System.out.println("[Playwright] Login realizado com sucesso");
+
+                page.navigate("https://salaonline.ceub.br/my/"); 
+                
+                List<Task> tarefasEncontradas = new ArrayList<>(); 
+
+                var elementos = page.querySelectorAll(".item-tarefa"); 
+
+                for (var element : elementos) {
+                    String title = element.querySelector(".titulo").innerText();
+                    String subject = element.querySelector(".disciplina").innerText();
+
+                    Task task = new Task(title, subject, LocalDataTime.now().plusDays(7), "http://salaonline.ceunb.br/my/"); 
+                    tarefasEncontradas.add(task); 
+                }
+
+                if (tarefasEncontradas.isEmpty()) { 
+                    System.out.println("[Playwright] Nenhuma tarefa encontrada."); 
+                } else { 
+                    System.out.println("[Playwright] Tarefas encontradas: " + tarefasEncontradas.size()); 
+                    taskRepository.saveAll(tarefasEncontradas); 
+                }
+
             }catch (Exception e) { 
                 System.err.println("Erro ao preencher os campos de login: " + e.getMessage()); 
+            }finally{ 
+                browser.close(); 
+                System.out.println("[Playwright] Varredura finalizada.");
             }
 
         } catch (Exception e) { 
