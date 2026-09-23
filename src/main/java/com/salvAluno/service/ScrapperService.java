@@ -97,9 +97,67 @@ public class ScrapperService {
                     page.waitForLoadState(); 
 
                     // Obter o nome da disciplina na página atual 
-                    String nomeMateria = "Disciplina"; 
-                    if (page.querySelector("h1") != null ){ 
-                        nomeMateria = page.querySelector("name-course").innerText(); 
+                    String nomeMateria = "Disciplina Desconhecida"; 
+                    ElementHandle tituloH1 = page.querySelector("h1"); 
+
+                    if (tituloH1 != null ){ 
+                        nomeMateria = tituloH1.innerText().trim(); 
+                    }
+
+                    // Procura o link do cronograma na página da matéria atual 
+                    ElementHandle linkCronograma = page.querySelector("a[title='Cronograma']"); 
+
+                    if (linkCronograma == null){ 
+                        System.out.println("[Playwright] Nenhum cronograma encontrado para a matéria: " + nomeMateria);
+                        
+                        continue; 
+                    }
+
+                    linkCronograma.click(); 
+                    page.waitForLoadState(); 
+
+                    // Procura a lista de atividades dentro do cronograma da matéria atual
+                    List<ElementHandle> linhasCronograma = page.querySelectorAll("ul.content_cronogramadv"); 
+
+                    for (ElementHandle linha : linhasCronograma){ 
+
+                        List <ElementHandle> colunas = linha.querySelectorAll("li");
+                       
+                        if (colunas.size() >= 3){ 
+
+                            String tituloAtividade = colunas.get(0).innerText().trim(); 
+                            String dataPrazoStr = colunas.get(2).innerText().trim(); 
+                            
+                            String tituloLower = tituloAtividade.toLowerCase();
+                            if (tituloLower.contains("atividade") || 
+                                tituloLower.contains("tarefa") || 
+                                tituloLower.contains("desafio") ||
+                                tituloLower.contains("trabalho") || 
+                                tituloLower.contains("prova") || 
+                                tituloLower.contains("fórum") || 
+                                tituloLower.contains("oficina") || 
+                                tituloLower.contains("laboratório")){ 
+
+                                LocalDateTime prazoFinal = converterDataPrazo(dataPrazoStr);
+
+                                if (prazoFinal != null) {
+                                    // Como o cronograma não tem o link direto da tarefa, salvamos a URL do próprio cronograma
+                                    String urlCronograma = page.url();
+                                
+                                    Task task = new Task(tituloAtividade, nomeMateria, prazoFinal, urlCronograma);
+                                    tarefasEncontradas.add(task);
+                                    
+                                    System.out.println("   📌 Encontrado: " + tituloAtividade + " | Prazo: " + dataFimStr);
+                                }
+                                System.out.println("[Playwright] Atividade encontrada: " + tituloAtividade + " - Prazo: " + dataPrazoStr);
+                            }
+
+                            continue; 
+                        }
+
+                        if (textoLinha.contains("Atividade") || textoLinha.contains("Tarefa")){ 
+                            System.out.println("[Playwright] Linha de atividade encontrada: " + textoLinha);
+                        }
                     }
 
                     // Cria uma lista para armazenar os blocos de atividades encontrados na matéria atual 
