@@ -124,7 +124,8 @@ public class ScrapperService {
                         List <ElementHandle> colunas = linha.querySelectorAll("li");
                        
                         if (colunas.size() >= 3){ 
-
+                            
+                            // Pega o título da atividade e a data de prazo da atividade 
                             String tituloAtividade = colunas.get(0).innerText().trim(); 
                             String dataPrazoStr = colunas.get(2).innerText().trim(); 
                             
@@ -147,92 +148,17 @@ public class ScrapperService {
                                     Task task = new Task(tituloAtividade, nomeMateria, prazoFinal, urlCronograma);
                                     tarefasEncontradas.add(task);
                                     
-                                    System.out.println("   📌 Encontrado: " + tituloAtividade + " | Prazo: " + dataFimStr);
+                                    System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade + " | Prazo: " + dataFimStr);
                                 }
-                                System.out.println("[Playwright] Atividade encontrada: " + tituloAtividade + " - Prazo: " + dataPrazoStr);
+                               
                             }
-
-                            continue; 
                         }
 
-                        if (textoLinha.contains("Atividade") || textoLinha.contains("Tarefa")){ 
-                            System.out.println("[Playwright] Linha de atividade encontrada: " + textoLinha);
-                        }
                     }
 
-                    // Cria uma lista para armazenar os blocos de atividades encontrados na matéria atual 
-                    List <ElementHandle> blocosAtividades = page.querySelectorAll(".activity-item, li.activity");  
-
-                    for (ElementHandle bloco : blocosAtividades){ 
-
-                        // Pega o link e o título da atividade dentro do bloco atual
-                        ElementHandle linkElement = bloco.querySelector("a.aalink");
-                        
-                        // Se não tem link, ignora o bloco e continua para o próximo bloco
-                        if (linkElement == null ){ 
-                            continue; 
-                        } 
-
-                        String titulo = linkElement.innerText().trim(); 
-                        String url = linkElement.getAttribute("href"); 
-
-                        // Procura a div exata de datas que contém a data de entrega da atividade, se existir 
-                        ElementHandle divDatas = bloco.querySelector("div[data-region='activity-dates']"); 
-                        String dataPrazo = null; 
-
-                        if (divDatas != null){ 
-
-                            // Pega o texto da div de datas e remove quebras de linha para facilitar a leitura 
-                            String textoDatas = divDatas.innerText().replace("\n", " ");
-
-                            if (textoDatas.contains("Fechado:")){ 
-                                dataPrazo = extrairTextoApos(textoDatas, "Fechado:");
-                            }else if (textoDatas.contains("Vencimento:")){ 
-                                dataPrazo = extrairTextoApos(textoDatas, "Vencimento:");
-                            }
-                        }
-
-                        // Verifica se a atividade já foi concluída 
-                        boolean concluida = bloco.innerText().contains("Feito:"); 
-
-                        System.out.println("📌 Atividade: " + titulo);
-                        System.out.println("   🗓️ Prazo bruto: " + (dataPrazo != null ? dataPrazo : "Sem prazo"));
-                        System.out.println("   ✅ Status: " + (concluida ? "Concluída" : "Pendente"));
-                        System.out.println("   🔗 Link: " + url);
-                        
-                        if (!concluida){ 
-
-                            // Se a data de prazo não foi encontrada, define um prazo provisório de 7 dias a partir da data atual
-                            LocalDateTime prazoProvisorio = LocalDateTime.now().plusDays(7); 
-                            
-                            // Se a data de prazo foi encontrada, tenta converter para LocalDateTime, caso contrário, usa o prazo provisório 
-                            Task task = new Task(titulo, nomeMateria, prazoProvisorio, url); 
-                            tarefasEncontradas.add(task);
-                        }
-
-                        // Cria uma lista para armazenar todas asatividades encontradas na matéria atual 
-                        List <ElementHandle> todasAtividades = page.querySelectorAll(
-                            "a[href*='mod/assign/view.php']" + 
-                            "a[href*='mod/quiz/view.php']" +
-                            "a[href*='mod/urlweb/view.php']" +
-                            "a[href*='mod/page/view.php']"  
-                        );
-
-                        for (ElementHandle atividade : todasAtividades){ 
-                            String tituloAtividade = atividade.innerText().trim();
-                            String urlAtividade = atividade.getAttribute("href"); 
-                            
-                            if (!tituloAtividade.isEmpty() && urlAtividade != null){ 
-
-                                System.out.println("[Playwright] Atividade encontrada: " + tituloAtividade + " - " + urlAtividade);
-
-                                Task task = new Task(tituloAtividade, nomeMateria, dataPrazo, urlAtividade);
-                                tarefasEncontradas.add(task); 
-                            }
-                        }
-                    }
                 }
 
+                // Persistência no Banco de Dados 
                 if (tarefasEncontradas.isEmpty()){ 
                     System.out.println("[Playwright] Nenhuma tarefa encontrada"); 
                 } else { 
@@ -243,32 +169,38 @@ public class ScrapperService {
 
 
             }catch (Exception e) { 
-                System.err.println("Erro ao preencher os campos de login: " + e.getMessage()); 
+                System.err.println("[Playwright] Erro durante a execução do scraping: " + e.getMessage());
+                e.printStackTrace(); 
+
             }finally{ 
                 browser.close(); 
                 System.out.println("[Playwright] Varredura finalizada.");
             }
 
         } catch (Exception e) { 
-            System.err.println("Erro ao iniciar o Playwright: " + e.getMessage()); 
+            System.err.println("[Playwright] Erro ao iniciar o Playwright: " + e.getMessage()); 
         }
     } 
 
-    private String extrairTextoApos(String texto, String palavraChave){ 
+
+    // Converte datas do formato "DD/MM/YY" para LocalDateTime  
+    private LocalDateTime converterDataPrazo(String dataStr){ 
 
         try{ 
-            int indice = texto.indexOf(palavraChave); 
-            if (indice != -1){ 
-                String substring = texto.substring(indice + palavraChave.length()).trim();
+            // Define o formato esperado da data que virá do site do CEUB 
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yy");
+            
+            // O "parse" serve para converter dados em formato de texto em outro tipo de dados  
+            LocalDate data = LocalDate.parse(dataStr, formattter); 
 
-                return substring;  
-            } 
+            // Retorna a data convertida para LocalDateTime, com hora definida como 23:59 (fim do dia)
+            return data.atTime(23,59); 
+        
         } catch (Exception e){ 
     
-            return "Erro ao extrair data";
+            System.err.println("[Playwright] Erro ao converter a data: " + dataStr); 
+            return null;
         }
-
-        return null; 
     }
 }
 
