@@ -17,6 +17,8 @@ import org.springframework.stereotype.Service;
 
 // Outras importações necessárias para o Java 
 import java.time.LocalDateTime; 
+import java.time.LocalDate; 
+import java.time.format.DateTimeFormatter; 
 import java.util.ArrayList; 
 import java.util.List; 
 
@@ -148,7 +150,7 @@ public class ScrapperService {
                                     Task task = new Task(tituloAtividade, nomeMateria, prazoFinal, urlCronograma);
                                     tarefasEncontradas.add(task);
                                     
-                                    System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade + " | Prazo: " + dataFimStr);
+                                    System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade + " | Prazo: " + dataPrazoStr);
                                 }
                                
                             }
@@ -191,7 +193,7 @@ public class ScrapperService {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yy");
             
             // O "parse" serve para converter dados em formato de texto em outro tipo de dados  
-            LocalDate data = LocalDate.parse(dataStr, formattter); 
+            LocalDate data = LocalDate.parse(dataStr, formatter); 
 
             // Retorna a data convertida para LocalDateTime, com hora definida como 23:59 (fim do dia)
             return data.atTime(23,59); 
