@@ -1,0 +1,88 @@
+<!-- Esse arquivo serve como o arquivo de configuração do Maven para o projeto Spring Boot -->
+
+<!-- Basicamente esse arquivo possue três funções principais: -->
+<!-- 1. Descarregar as bibliotecas automaticamente (Dependências) -->
+<!-- 2. Definir as regras do projeto (Metadados) -->
+<!-- 3. Gerar o executável final (Build) -->
+
+
+
+
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+		 xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+    <!-- Configuração Base do Spring Boot-->
+	<parent>
+		<groupId>org.springframework.boot</groupId>
+		<artifactId>spring-boot-starter-parent</artifactId>
+		<version>3.3.5</version>
+		<relativePath/>
+	</parent>
+
+    <!-- Configuração do Projeto -->
+	<groupId>com.salvAluno</groupId>
+	<artifactId>salv-aluno</artifactId>
+	<version>0.0.1-SNAPSHOT</version>
+	<name>SalvAluno</name>
+	<description>Organizador automático de tarefas acadêmicas</description>
+
+	<properties>
+		<java.version>17</java.version>
+		<playwright.version>1.48.0</playwright.version>
+	</properties>
+
+	<dependencies>
+        
+        <!-- Dependências do Spring Boot -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-web</artifactId>
+		</dependency>
+
+        <!-- Dependências do Spring Data JPA -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-data-jpa</artifactId>
+		</dependency>
+
+        <!-- Dependências do H2 (Banco de dados em memória)--> 
+		<dependency>
+			<groupId>com.h2database</groupId>
+			<artifactId>h2</artifactId>
+			<scope>runtime</scope>
+		</dependency>
+
+        <!-- Dependências do Playwright (Automatização de testes) -->
+		<dependency>
+			<groupId>com.microsoft.playwright</groupId>
+			<artifactId>playwright</artifactId>
+			<version>${playwright.version}</version>
+		</dependency>
+
+        <!-- Dependências do Spring Boot Test (Testes unitários e de integração)-->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-test</artifactId>
+			<scope>test</scope>
+		</dependency>
+	</dependencies>
+
+	<build>
+		<plugins>
+        
+            <!-- Plugin para compilar e empacotar a aplicação do Spring Boot -->
+			<plugin>
+				<groupId>org.springframework.boot</groupId>
+				<artifactId>spring-boot-maven-plugin</artifactId>
+			</plugin>
+			<plugin>
+				<groupId>org.codehaus.mojo</groupId>
+				<artifactId>exec-maven-plugin</artifactId>
+				<version>3.4.1</version>
+			</plugin>
+		</plugins>
+	</build>
+</project>
