@@ -1,2 +1,9 @@
+# Segurança e Credenciais 
 .env 
 application.properties 
+target/
+
+# IDES e Editores 
+.ideia/ 
+.vscode/ 
+*.iml 
