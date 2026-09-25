@@ -99,17 +99,19 @@ Para baixar as dependências e gerar o build:
 mvn clean install
 ```
 
-Em seguida, inicie a aplicação:
+Após a compilação, inicie a aplicação executando o arquivo JAR gerado:
+
+```bash
+java -jar target/salv-aluno-0.0.1-SNAPSHOT.jar
+```
+
+O comando `mvn spring-boot:run` também pode ser usado em ambientes compatíveis:
 
 ```bash
 mvn spring-boot:run
 ```
 
-Também é possível executar o arquivo JAR gerado:
-
-```bash
-java -jar target/*.jar
-```
+Neste projeto, a execução pelo JAR foi utilizada porque o `spring-boot:run` apresentou erro ao localizar a classe principal.
 
 Quando a aplicação estiver em execução, acesse `http://localhost:8080`.
 

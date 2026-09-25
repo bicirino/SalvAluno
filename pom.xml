@@ -1,13 +1,3 @@
-<!-- Esse arquivo serve como o arquivo de configuração do Maven para o projeto Spring Boot -->
-
-<!-- Basicamente esse arquivo possue três funções principais: -->
-<!-- 1. Descarregar as bibliotecas automaticamente (Dependências) -->
-<!-- 2. Definir as regras do projeto (Metadados) -->
-<!-- 3. Gerar o executável final (Build) -->
-
-
-
-
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
 		 xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"

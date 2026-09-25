@@ -1,4 +1,4 @@
-package main.java.com.salvAluno.controller;
+package com.salvAluno.controller; 
 
 
 // Importa outros pacotes e classes necessárias para o funcionamento do controlador
