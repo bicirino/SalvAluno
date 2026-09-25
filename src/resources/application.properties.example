@@ -1,0 +1,24 @@
+# ===================================================================
+# MODELO DE CONFIGURAÇÃO - SALVALUNO
+# Copie este ficheiro para 'application.properties' e preencha as credenciais.
+# ===================================================================
+
+# Configurações do Portal
+portal.url=https://ea.uniceub.br/Sistema/Acesso/Login
+portal.RA=${PORTAL_RA:seu_ra_aqui}
+portal.password=${PORTAL_PASSWORD:sua_senha_aqui}
+
+# Base de Dados H2
+spring.datasource.url=jdbc:h2:mem:salvaluno;DB_CLOSE_DELAY=-1
+spring.datasource.driverClassName=org.h2.Driver
+spring.datasource.username=sa
+spring.datasource.password=
+
+# H2 Console
+spring.h2.console.enabled=true
+spring.h2.console.path=/h2-console
+
+# JPA / Hibernate
+spring.jpa.database-platform=org.hibernate.dialect.H2Dialect
+spring.jpa.hibernate.ddl-auto=update
+spring.jpa.show-sql=false
