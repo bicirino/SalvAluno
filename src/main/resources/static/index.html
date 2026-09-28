@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SalvAluno</title>
+    
+    <link rel="stylesheet" href="style.css">
+
+</head>
+<body>
+    <main class="app-shell">
+        <header class="topbar">
+            <a class="brand" href="/" aria-label="Página inicial do SalvAluno">
+                <span class="brand-mark">S</span>
+                <span>
+                    <strong>SalvAluno</strong>
+                    <small>Organizador acadêmico</small>
+                </span>
+            </a>
+            <span class="status-pill"><span class="status-dot"></span> CEUB</span>
+        </header>
+
+        <section class="welcome">
+            <div>
+                <p class="eyebrow">Seu semestre em ordem</p>
+                <h1>Olá, aluno.</h1>
+                <p class="subtitle">Acompanhe suas tarefas e mantenha os prazos sob controle.</p>
+            </div>
+            <button id="sync" class="sync-button" type="button">
+                <span class="sync-icon" aria-hidden="true">↻</span>
+                Sincronizar tarefas
+            </button>
+        </section>
+
+        <section class="task-panel" aria-labelledby="tasks-heading">
+            <div class="panel-heading">
+                <div>
+                    <p class="eyebrow">Visão geral</p>
+                    <h2 id="tasks-heading">Próximas tarefas</h2>
+                </div>
+                <span id="task-count" class="task-count">0 tarefas</span>
+            </div>
+            <p id="status" class="status-message" role="status"></p>
+            <ul id="tasks" class="task-list"><li class="empty-state">Carregando tarefas...</li></ul>
+        </section>
+
+        <footer>SalvAluno <span>•</span> dados sincronizados do portal acadêmico</footer>
+    </main>
+    <script>
+        const status = document.getElementById('status');
+        const tasks = document.getElementById('tasks');
+        const taskCount = document.getElementById('task-count');
+
+        async function loadTasks() {
+            const response = await fetch('/api/tasks');
+            const data = await response.json();
+            taskCount.textContent = `${data.length} ${data.length === 1 ? 'tarefa' : 'tarefas'}`;
+            tasks.innerHTML = data.length
+                ? data.map(task => `<li class="task-item"><span class="task-marker"></span><span><strong>${task.title}</strong><small>${task.subject || 'Sem disciplina'}</small></span></li>`).join('')
+                : '<li class="empty-state">Nenhuma tarefa sincronizada.</li>';
+        }
+
+        document.getElementById('sync').addEventListener('click', async () => {
+            const button = document.getElementById('sync');
+            button.disabled = true;
+            status.textContent = 'Sincronização iniciada...';
+            try {
+                const response = await fetch('/api/tasks/sync', { method: 'POST' });
+                status.textContent = await response.text();
+            } catch (error) {
+                status.textContent = 'Não foi possível iniciar a sincronização.';
+            } finally {
+                button.disabled = false;
+            }
+        });
+
+        loadTasks().catch(() => { status.textContent = 'Não foi possível carregar as tarefas.'; });
+    </script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
+:root {
+	color: #172b4d;
+	background: #f5f7fb;
+	font-family: 'DM Sans', sans-serif;
+	font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+body { min-width: 320px; min-height: 100vh; margin: 0; background: radial-gradient(circle at 85% 0%, #dfeeff 0, #f5f7fb 38rem); }
+.app-shell { width: min(1040px, calc(100% - 40px)); margin: 0 auto; padding: 28px 0 24px; }
+.topbar, .welcome, .panel-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; }
+.brand { display: flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; }
+.brand-mark { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 12px; color: white; background: #1769e0; box-shadow: 0 8px 18px #1769e044; font: 700 22px 'Space Grotesk', sans-serif; }
+.brand strong, h1, h2 { font-family: 'Space Grotesk', sans-serif; }
+.brand strong { display: block; font-size: 17px; }
+.brand small { display: block; margin-top: 2px; color: #71809a; font-size: 11px; }
+.status-pill { padding: 7px 12px; border: 1px solid #d9e3f2; border-radius: 99px; color: #51627c; background: #ffffffaa; font-size: 12px; font-weight: 600; }
+.status-dot { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; background: #35b875; }
+.welcome { margin: 76px 0 42px; align-items: end; }
+.eyebrow { margin: 0 0 8px; color: #1769e0; font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+h1, h2 { margin: 0; letter-spacing: -.04em; }
+h1 { font-size: clamp(38px, 6vw, 64px); line-height: 1; }
+h2 { font-size: 24px; }
+.subtitle { max-width: 420px; margin: 14px 0 0; color: #71809a; font-size: 15px; }
+.sync-button { display: inline-flex; align-items: center; gap: 9px; border: 0; border-radius: 10px; padding: 13px 17px; color: white; background: #1769e0; box-shadow: 0 9px 18px #1769e033; cursor: pointer; font: 600 13px 'DM Sans', sans-serif; transition: transform .2s, background .2s; }
+.sync-button:hover { background: #1254b5; transform: translateY(-2px); }
+.sync-button:disabled { cursor: wait; opacity: .7; }
+.sync-icon { font-size: 19px; line-height: 0; }
+.task-panel { min-height: 250px; border: 1px solid #e2e8f2; border-radius: 16px; padding: 28px; background: #fff; box-shadow: 0 18px 45px #244b7b0d; }
+.task-count { color: #1769e0; font-size: 12px; font-weight: 700; }
+.status-message { min-height: 20px; margin: 18px 0 0; color: #71809a; font-size: 13px; }
+.task-list { display: grid; gap: 10px; margin: 4px 0 0; padding: 0; list-style: none; }
+.task-item { display: flex; align-items: center; gap: 14px; border: 1px solid #edf0f6; border-radius: 10px; padding: 14px 16px; background: #fbfcfe; }
+.task-marker { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: #ffae42; box-shadow: 0 0 0 5px #fff3df; }
+.task-item strong, .task-item small { display: block; }
+.task-item strong { font-size: 14px; }
+.task-item small { margin-top: 3px; color: #8793a8; font-size: 12px; }
+.empty-state { padding: 28px 0; color: #8793a8; text-align: center; font-size: 14px; }
+footer { margin-top: 24px; color: #9aa6b8; text-align: center; font-size: 11px; }
+footer span { padding: 0 5px; color: #c4ccda; }
+@media (max-width: 640px) {
+	.app-shell { width: min(100% - 28px, 520px); padding-top: 18px; }
+	.welcome { display: block; margin: 58px 0 30px; }
+	.sync-button { width: 100%; justify-content: center; margin-top: 24px; }
+	.task-panel { padding: 20px; }
+}
