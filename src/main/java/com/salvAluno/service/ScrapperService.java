@@ -36,16 +36,19 @@ public class ScrapperService {
     private String portalUrl; 
 
     // Injeta o RA do usuário que será usado no login do portal da faculdade 
-    @Value("${portal.RA: seu_RA}") 
+    @Value("${portal.RA:seu_RA}") 
     private String RA; 
 
     // Injeta a senha do usuário que será usada no login do portal da faculdade 
-    @Value("${portal.password: sua_senha}")
+    @Value("${portal.password:sua_senha}")
     private String password; 
 
     // Método principal para o Scrapping 
     public void scrapData(){ 
         System.out.println("Iniciando o scrapping de dados...");
+
+        RA = RA.trim();
+        password = password.trim();
 
         try (Playwright playwright = Playwright.create()) { 
 
@@ -71,31 +74,20 @@ public class ScrapperService {
 
                 System.out.println("[Playwright] Login realizado com sucesso");
 
-                page.navigate("https://salaonline.ceub.br/my/"); 
+                // Após o login, o portal exibe os ambientes disponíveis.
+                page.getByText("Sala Online (2025)", new Page.GetByTextOptions().setExact(true)).click();
                 page.waitForLoadState(); 
+                page.waitForSelector("h4.overviewCard-title");
                 
                 List<Task> tarefasEncontradas = new ArrayList<>(); 
+                String paginaCursosUrl = page.url();
+                int quantidadeMaterias = page.locator("h4.overviewCard-title").count();
 
-                // Encontra todos os links das matérias
-                List<ElementHandle> linksMaterias = page.querySelectorAll("a[href*='course/view.php']"); 
+                System.out.println("[Playwright] Matérias encontradas: " + quantidadeMaterias);
 
-                // Cria uma lista para armazenar as URLs das matérias encontradas
-                List<String> urlsMaterias = new ArrayList<>(); 
-
-                // Itera sobre os links encontrados e adiciona as URLs únicas à lista 
-                for (ElementHandle link : linksMaterias){ 
-                    String url = link.getAttribute("href");
-                    
-                    if (url != null && !urlsMaterias.contains(url)){ 
-                        urlsMaterias.add(url);
-                    }
-                }
-
-                System.out.println("[Playwright] Matérias encontradas: " + urlsMaterias.size());
-
-                // Loop para entrar em cada matéria e varrer as atividades/tarefas 
-                for (String urlMateria : urlsMaterias){ 
-                    page.navigate(urlMateria); 
+                // Cada matéria aparece como um cartão com um h4 clicável.
+                for (int indiceMateria = 0; indiceMateria < quantidadeMaterias; indiceMateria++){ 
+                    page.locator("h4.overviewCard-title").nth(indiceMateria).click();
                     page.waitForLoadState(); 
 
                     // Obter o nome da disciplina na página atual 
@@ -107,11 +99,12 @@ public class ScrapperService {
                     }
 
                     // Procura o link do cronograma na página da matéria atual 
-                    ElementHandle linkCronograma = page.querySelector("a[title='Cronograma']"); 
+                    ElementHandle linkCronograma = page.querySelector("h3.overviewCard-title a[title='Cronograma']"); 
 
                     if (linkCronograma == null){ 
                         System.out.println("[Playwright] Nenhum cronograma encontrado para a matéria: " + nomeMateria);
-                        
+                        page.navigate(paginaCursosUrl);
+                        page.waitForLoadState();
                         continue; 
                     }
 
@@ -128,35 +121,24 @@ public class ScrapperService {
                         if (colunas.size() >= 3){ 
                             
                             // Pega o título da atividade e a data de prazo da atividade 
-                            String tituloAtividade = colunas.get(0).innerText().trim(); 
-                            String dataPrazoStr = colunas.get(2).innerText().trim(); 
-                            
-                            String tituloLower = tituloAtividade.toLowerCase();
-                            if (tituloLower.contains("atividade") || 
-                                tituloLower.contains("tarefa") || 
-                                tituloLower.contains("desafio") ||
-                                tituloLower.contains("trabalho") || 
-                                tituloLower.contains("prova") || 
-                                tituloLower.contains("fórum") || 
-                                tituloLower.contains("oficina") || 
-                                tituloLower.contains("laboratório")){ 
+                            String tituloAtividade = colunas.get(0).innerText().trim();
+                            String dataPrazoStr = colunas.get(2).innerText().trim();
+                            LocalDateTime prazoFinal = converterDataPrazo(dataPrazoStr);
 
-                                LocalDateTime prazoFinal = converterDataPrazo(dataPrazoStr);
+                            if (prazoFinal != null) {
+                                // A terceira coluna representa a Data de Término do cronograma.
+                                String urlCronograma = page.url();
+                                Task task = new Task(tituloAtividade, nomeMateria, prazoFinal, urlCronograma);
+                                tarefasEncontradas.add(task);
 
-                                if (prazoFinal != null) {
-                                    // Como o cronograma não tem o link direto da tarefa, salvamos a URL do próprio cronograma
-                                    String urlCronograma = page.url();
-                                
-                                    Task task = new Task(tituloAtividade, nomeMateria, prazoFinal, urlCronograma);
-                                    tarefasEncontradas.add(task);
-                                    
-                                    System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade + " | Prazo: " + dataPrazoStr);
-                                }
-                               
+                                System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade + " | Prazo: " + dataPrazoStr);
                             }
                         }
 
                     }
+
+                    page.navigate(paginaCursosUrl);
+                    page.waitForLoadState();
 
                 }
 
@@ -191,9 +173,8 @@ public class ScrapperService {
         try{ 
             // Define o formato esperado da data que virá do site do CEUB 
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yy");
-            
-            // O "parse" serve para converter dados em formato de texto em outro tipo de dados  
-            LocalDate data = LocalDate.parse(dataStr, formatter); 
+            String dataEncontrada = dataStr.replaceAll(".*?(\\d{2}/\\d{2}/\\d{2}).*", "$1");
+            LocalDate data = LocalDate.parse(dataEncontrada, formatter);
 
             // Retorna a data convertida para LocalDateTime, com hora definida como 23:59 (fim do dia)
             return data.atTime(23,59); 
