@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>SalvAluno</title>
     
     <link rel="stylesheet" href="style.css">
@@ -12,8 +13,8 @@
     <div id="loading-screen" class="loading-screen" aria-hidden="true">
         <div class="loading-card" role="status" aria-live="polite">
             <span class="loading-spinner" aria-hidden="true"></span>
-            <strong>Sincronizando suas tarefas</strong>
-            <p>Estamos consultando o portal CEUB.<br>A sincronização continuará em segundo plano.</p>
+            <strong id="loading-title">Sincronizando suas tarefas</strong>
+            <p id="loading-detail">Conectando ao portal CEUB…<br>Isso pode levar alguns minutos. Aguarde nesta tela.</p>
         </div>
     </div>
     <main class="app-shell">
@@ -62,6 +63,68 @@
         const tasks = document.getElementById('tasks');
         const taskCount = document.getElementById('task-count');
         const loadingScreen = document.getElementById('loading-screen');
+        const loadingDetail = document.getElementById('loading-detail');
+
+        function setLoadingVisible(visible) {
+            loadingScreen.classList.toggle('is-visible', visible);
+            loadingScreen.setAttribute('aria-hidden', visible ? 'false' : 'true');
+        }
+
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        async function fetchSyncStatus() {
+            const response = await fetch(`/api/tasks/sync/status?_=${Date.now()}`, { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error('Não foi possível consultar o status da sincronização.');
+            }
+            return response.json();
+        }
+
+        /** Evita fechar o loading antes da thread do Playwright marcar running=true. */
+        async function aguardarInicioVarredura() {
+            const limiteMs = 20_000;
+            const inicio = Date.now();
+            while (Date.now() - inicio < limiteMs) {
+                const data = await fetchSyncStatus();
+                if (data.running) {
+                    return true;
+                }
+                await sleep(300);
+            }
+            return false;
+        }
+
+        /** Mantém o loading até a varredura terminar de fato (running=false confirmado). */
+        async function aguardarFimVarredura() {
+            const limiteMs = 10 * 60 * 1000;
+            const inicio = Date.now();
+
+            while (Date.now() - inicio < limiteMs) {
+                const data = await fetchSyncStatus();
+                if (data.message) {
+                    loadingDetail.innerHTML = `${data.message}<br>Aguarde — a varredura ainda não terminou.`;
+                }
+                if (!data.running) {
+                    await sleep(500);
+                    const confirmacao = await fetchSyncStatus();
+                    if (!confirmacao.running) {
+                        return true;
+                    }
+                }
+                await sleep(1000);
+            }
+            return false;
+        }
+
+        async function aguardarVarreduraCompleta(jaEmAndamento) {
+            if (!jaEmAndamento) {
+                loadingDetail.innerHTML = 'Iniciando varredura no portal…<br>Aguarde — a varredura ainda não terminou.';
+                await aguardarInicioVarredura();
+            }
+            return aguardarFimVarredura();
+        }
 
         async function loadTasks() {
             const response = await fetch('/api/tasks');
@@ -74,21 +137,36 @@
 
         document.getElementById('sync').addEventListener('click', async () => {
             const button = document.getElementById('sync');
-            const startedAt = Date.now();
             button.disabled = true;
-            loadingScreen.classList.add('is-visible');
-            loadingScreen.setAttribute('aria-hidden', 'false');
-            status.textContent = 'Sincronização iniciada...';
+            setLoadingVisible(true);
+            loadingDetail.innerHTML = 'Conectando ao portal CEUB…<br>Aguarde — ainda estamos sincronizando.';
+            status.textContent = '';
             try {
-                const response = await fetch('/api/tasks/sync', { method: 'POST' });
-                status.textContent = await response.text();
-                await new Promise(resolve => setTimeout(resolve, Math.max(0, 8000 - (Date.now() - startedAt))));
+                const response = await fetch('/api/tasks/sync', { method: 'POST', cache: 'no-store' });
+                const body = await response.text();
+
+                if (response.status === 409) {
+                    status.textContent = body;
+                    const concluiu = await aguardarVarreduraCompleta(true);
+                    status.textContent = concluiu
+                        ? 'Sincronização concluída.'
+                        : 'A varredura demorou mais que o esperado.';
+                } else if (!response.ok) {
+                    status.textContent = 'Não foi possível iniciar a sincronização.';
+                    return;
+                } else {
+                    status.textContent = 'Varredura em andamento…';
+                    const concluiu = await aguardarVarreduraCompleta(false);
+                    status.textContent = concluiu
+                        ? 'Sincronização concluída.'
+                        : 'A varredura demorou mais que o esperado. Tente sincronizar novamente.';
+                }
+
                 await loadTasks();
             } catch (error) {
-                status.textContent = 'Não foi possível iniciar a sincronização.';
+                status.textContent = 'Não foi possível sincronizar. Verifique se o servidor está em execução.';
             } finally {
-                loadingScreen.classList.remove('is-visible');
-                loadingScreen.setAttribute('aria-hidden', 'true');
+                setLoadingVisible(false);
                 button.disabled = false;
             }
         });

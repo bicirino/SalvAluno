@@ -28,11 +28,21 @@ public class TaskController {
     // Endpoint para acionar o scrapping em segundo plano 
     @PostMapping("/sync")
     public ResponseEntity<String> sincronizarTarefas(){ 
+        if (scrapperService.isSyncEmAndamento()) {
+            return ResponseEntity.status(409).body("Já existe uma sincronização em andamento.");
+        }
 
-        // Executa o scraper numa thread separada para não causar Timeout na requisição HTTP 
         new Thread(() -> scrapperService.scrapData()).start(); 
 
-        return ResponseEntity.ok("Scrapping iniciado em segundo plano. As tarefas serão sincronizadas em breve."); 
+        return ResponseEntity.ok("Sincronização iniciada."); 
+    }
+
+    @GetMapping("/sync/status")
+    public ResponseEntity<SyncStatusResponse> statusSincronizacao() {
+        return ResponseEntity.ok(new SyncStatusResponse(
+                scrapperService.isSyncEmAndamento(),
+                scrapperService.getSyncMensagem()
+        ));
     }
 
     // Endpoint para listar todas as tarefas do banco de dados 
