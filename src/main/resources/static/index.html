@@ -9,6 +9,13 @@
 
 </head>
 <body>
+    <div id="loading-screen" class="loading-screen" aria-hidden="true">
+        <div class="loading-card" role="status" aria-live="polite">
+            <span class="loading-spinner" aria-hidden="true"></span>
+            <strong>Sincronizando suas tarefas</strong>
+            <p>Estamos consultando o portal CEUB.<br>A sincronização continuará em segundo plano.</p>
+        </div>
+    </div>
     <main class="app-shell">
         <header class="topbar">
             <a class="brand" href="/" aria-label="Página inicial do SalvAluno">
@@ -54,6 +61,7 @@
         const status = document.getElementById('status');
         const tasks = document.getElementById('tasks');
         const taskCount = document.getElementById('task-count');
+        const loadingScreen = document.getElementById('loading-screen');
 
         async function loadTasks() {
             const response = await fetch('/api/tasks');
@@ -66,14 +74,20 @@
 
         document.getElementById('sync').addEventListener('click', async () => {
             const button = document.getElementById('sync');
+            const startedAt = Date.now();
             button.disabled = true;
+            loadingScreen.classList.add('is-visible');
+            loadingScreen.setAttribute('aria-hidden', 'false');
             status.textContent = 'Sincronização iniciada...';
             try {
                 const response = await fetch('/api/tasks/sync', { method: 'POST' });
                 status.textContent = await response.text();
+                await new Promise(resolve => setTimeout(resolve, Math.max(0, 1600 - (Date.now() - startedAt))));
             } catch (error) {
                 status.textContent = 'Não foi possível iniciar a sincronização.';
             } finally {
+                loadingScreen.classList.remove('is-visible');
+                loadingScreen.setAttribute('aria-hidden', 'true');
                 button.disabled = false;
             }
         });
