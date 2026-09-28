@@ -7,6 +7,7 @@ package com.salvAluno.service;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.ElementHandle;
+import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.salvAluno.domain.Task;
@@ -19,13 +20,17 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime; 
 import java.time.LocalDate; 
 import java.time.format.DateTimeFormatter; 
-import java.util.ArrayList; 
-import java.util.List; 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
 
 // A tag @Service indica que esta classe é um serviço do Spring, permitindo que seja injetada em outras partes da aplicação.
 // O Spring vai instanciar essa classe como um "Bean" que é um objeto especial que é mantido e gerido pelo próprio Spring
 @Service 
 public class ScrapperService { 
+
+    private static final String SCRAPER_VERSION = "2-salaonline-popup";
 
     // Injeta o repositório para podermos guardar as tarefas diretamente no banco de dados 
     @Autowired 
@@ -41,14 +46,24 @@ public class ScrapperService {
 
     // Injeta a senha do usuário que será usada no login do portal da faculdade 
     @Value("${portal.password:sua_senha}")
-    private String password; 
+    private String password;
+
+    @Value("${portal.salaOnline:Sala Online (2025)}")
+    private String salaOnlineLabel;
 
     // Método principal para o Scrapping 
     public void scrapData(){ 
-        System.out.println("Iniciando o scrapping de dados...");
+        System.out.println("Iniciando o scrapping de dados... [scraper=" + SCRAPER_VERSION + "]");
 
         RA = RA.trim();
         password = password.trim();
+
+        if (RA.isEmpty() || password.isEmpty() || "seu_RA".equals(RA) || "sua_senha".equals(password)) {
+            System.err.println("[Playwright] Credenciais do portal não configuradas. "
+                    + "Preencha portal.RA e portal.password em src/main/resources/application.properties "
+                    + "e gere o JAR novamente (mvn clean package), ou coloque application.properties na pasta do JAR.");
+            return;
+        }
 
         try (Playwright playwright = Playwright.create()) { 
 
@@ -69,77 +84,69 @@ public class ScrapperService {
                 page.fill("#coAcesso", RA); 
                 page.fill("#coSenha", password); 
 
-                page.click ("#btn-login");
-                page.waitForLoadState(); 
+                page.click("#btn-login");
+                page.waitForURL(
+                        url -> !url.contains("/Sistema/Acesso/Login"),
+                        new Page.WaitForURLOptions().setTimeout(30_000)
+                );
+                page.waitForLoadState();
 
-                System.out.println("[Playwright] Login realizado com sucesso");
+                System.out.println("[Playwright] Login realizado. URL: " + page.url());
 
-                // Após o login, o portal exibe os ambientes disponíveis.
-                page.getByText("Sala Online (2025)", new Page.GetByTextOptions().setExact(true)).click();
-                page.waitForLoadState(); 
-                page.waitForSelector("h4.overviewCard-title");
-                
-                List<Task> tarefasEncontradas = new ArrayList<>(); 
-                String paginaCursosUrl = page.url();
-                int quantidadeMaterias = page.locator("h4.overviewCard-title").count();
+                Page salaOnline = abrirSalaOnline(page);
+                salaOnline.waitForLoadState();
+                salaOnline.locator("div.card-course[data-course-id]").first().waitFor(
+                        new Locator.WaitForOptions().setTimeout(60_000)
+                );
+
+                List<Task> tarefasEncontradas = new ArrayList<>();
+                String paginaCursosUrl = salaOnline.url();
+                List<String> urlsDisciplinas = listarUrlsDisciplinas(salaOnline);
+                int quantidadeMaterias = urlsDisciplinas.size();
 
                 System.out.println("[Playwright] Matérias encontradas: " + quantidadeMaterias);
 
-                // Cada matéria aparece como um cartão com um h4 clicável.
-                for (int indiceMateria = 0; indiceMateria < quantidadeMaterias; indiceMateria++){ 
-                    page.locator("h4.overviewCard-title").nth(indiceMateria).click();
-                    page.waitForLoadState(); 
+                for (String urlDisciplina : urlsDisciplinas) {
+                    salaOnline.navigate(urlDisciplina);
+                    salaOnline.waitForLoadState();
 
-                    // Obter o nome da disciplina na página atual 
-                    String nomeMateria = "Disciplina Desconhecida"; 
-                    ElementHandle tituloH1 = page.querySelector("h1"); 
-
-                    if (tituloH1 != null ){ 
-                        nomeMateria = tituloH1.innerText().trim(); 
+                    String nomeMateria = "Disciplina Desconhecida";
+                    ElementHandle tituloH1 = salaOnline.querySelector("h1");
+                    if (tituloH1 != null) {
+                        nomeMateria = tituloH1.innerText().trim();
                     }
 
-                    // Procura o link do cronograma na página da matéria atual 
-                    ElementHandle linkCronograma = page.querySelector("h3.overviewCard-title a[title='Cronograma']"); 
-
-                    if (linkCronograma == null){ 
+                    ElementHandle linkCronograma = salaOnline.querySelector("h3.overviewCard-title a[title='Cronograma']");
+                    if (linkCronograma == null) {
                         System.out.println("[Playwright] Nenhum cronograma encontrado para a matéria: " + nomeMateria);
-                        page.navigate(paginaCursosUrl);
-                        page.waitForLoadState();
-                        continue; 
+                        continue;
                     }
 
-                    linkCronograma.click(); 
-                    page.waitForLoadState(); 
+                    linkCronograma.click();
+                    salaOnline.waitForLoadState();
 
-                    // Procura a lista de atividades dentro do cronograma da matéria atual
-                    List<ElementHandle> linhasCronograma = page.querySelectorAll("ul.content_cronogramadv"); 
+                    List<ElementHandle> linhasCronograma = salaOnline.querySelectorAll("ul.content_cronogramadv");
 
-                    for (ElementHandle linha : linhasCronograma){ 
+                    for (ElementHandle linha : linhasCronograma) {
+                        List<ElementHandle> colunas = linha.querySelectorAll("li");
 
-                        List <ElementHandle> colunas = linha.querySelectorAll("li");
-                       
-                        if (colunas.size() >= 3){ 
-                            
-                            // Pega o título da atividade e a data de prazo da atividade 
+                        if (colunas.size() >= 3) {
                             String tituloAtividade = colunas.get(0).innerText().trim();
                             String dataPrazoStr = colunas.get(2).innerText().trim();
                             LocalDateTime prazoFinal = converterDataPrazo(dataPrazoStr);
 
                             if (prazoFinal != null) {
-                                // A terceira coluna representa a Data de Término do cronograma.
-                                String urlCronograma = page.url();
+                                String urlCronograma = salaOnline.url();
                                 Task task = new Task(tituloAtividade, nomeMateria, prazoFinal, urlCronograma);
                                 tarefasEncontradas.add(task);
 
                                 System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade + " | Prazo: " + dataPrazoStr);
                             }
                         }
-
                     }
 
-                    page.navigate(paginaCursosUrl);
-                    page.waitForLoadState();
-
+                    salaOnline.navigate(paginaCursosUrl);
+                    salaOnline.waitForLoadState();
                 }
 
                 // Persistência no Banco de Dados 
@@ -166,6 +173,38 @@ public class ScrapperService {
         }
     } 
 
+
+    private Page abrirSalaOnline(Page espacoAluno) {
+        var salaOnlineTexto = new Page.GetByTextOptions().setExact(true);
+        try {
+            Page popup = espacoAluno.context().waitForPage(
+                    new com.microsoft.playwright.BrowserContext.WaitForPageOptions().setTimeout(15_000),
+                    () -> espacoAluno.getByText(salaOnlineLabel, salaOnlineTexto).click()
+            );
+            popup.waitForLoadState();
+            System.out.println("[Playwright] Sala Online aberta em nova aba: " + popup.url());
+            return popup;
+        } catch (Exception e) {
+            System.out.println("[Playwright] Popup não detectado, tentando mesma aba: " + e.getMessage());
+            espacoAluno.getByText(salaOnlineLabel, salaOnlineTexto).click();
+            espacoAluno.waitForLoadState();
+            System.out.println("[Playwright] Sala Online na mesma aba: " + espacoAluno.url());
+            return espacoAluno;
+        }
+    }
+
+    private List<String> listarUrlsDisciplinas(Page salaOnline) {
+        Set<String> urls = new LinkedHashSet<>();
+        Locator links = salaOnline.locator("div.card-course[data-course-id] a[href*='course/view.php']");
+        int total = links.count();
+        for (int i = 0; i < total; i++) {
+            String href = links.nth(i).getAttribute("href");
+            if (href != null && !href.isBlank()) {
+                urls.add(href);
+            }
+        }
+        return new ArrayList<>(urls);
+    }
 
     // Converte datas do formato "DD/MM/YY" para LocalDateTime  
     private LocalDateTime converterDataPrazo(String dataStr){ 

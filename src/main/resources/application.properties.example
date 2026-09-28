@@ -5,8 +5,10 @@
 
 # Configurações do Portal
 portal.url=https://ea.uniceub.br/Sistema/Acesso/Login
-portal.RA=${PORTAL_RA:seu_ra_aqui}
-portal.password=${PORTAL_PASSWORD:sua_senha_aqui}
+# Use o RA e a senha literais (sem ${...}), ou variáveis de ambiente com sintaxe ${NOME_VAR:valor_padrao}
+portal.RA=seu_ra_aqui
+portal.password=sua_senha_aqui
+portal.salaOnline=Sala Online (2025)
 
 # Base de Dados H2
 spring.datasource.url=jdbc:h2:mem:salvaluno;DB_CLOSE_DELAY=-1

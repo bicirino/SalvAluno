@@ -82,7 +82,8 @@
             try {
                 const response = await fetch('/api/tasks/sync', { method: 'POST' });
                 status.textContent = await response.text();
-                await new Promise(resolve => setTimeout(resolve, Math.max(0, 1600 - (Date.now() - startedAt))));
+                await new Promise(resolve => setTimeout(resolve, Math.max(0, 8000 - (Date.now() - startedAt))));
+                await loadTasks();
             } catch (error) {
                 status.textContent = 'Não foi possível iniciar a sincronização.';
             } finally {
