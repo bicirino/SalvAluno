@@ -35,13 +35,16 @@
         <section class="welcome">
             <div>
                 <p class="eyebrow">Seu semestre em ordem</p>
-                <h1>Olá, aluno.</h1>
+                <h1 id="greeting">Olá!</h1>
                 <p class="subtitle">Acompanhe suas tarefas e mantenha os prazos sob controle.</p>
             </div>
-            <button id="sync" class="sync-button" type="button">
-                <span class="sync-icon" aria-hidden="true">↻</span>
-                Sincronizar tarefas
-            </button>
+            <div class="welcome-actions">
+                <button id="logout" class="ghost-button" type="button">Sair</button>
+                <button id="sync" class="sync-button" type="button">
+                    <span class="sync-icon" aria-hidden="true">↻</span>
+                    Sincronizar tarefas
+                </button>
+            </div>
         </section>
 
         <section class="task-panel" aria-labelledby="tasks-heading">
@@ -171,7 +174,25 @@
             }
         });
 
-        loadTasks().catch(() => { status.textContent = 'Não foi possível carregar as tarefas.'; });
+        async function loadProfile() {
+            const response = await fetch('/api/auth/me', { cache: 'no-store' });
+            if (!response.ok) {
+                window.location.replace('/login.html');
+                return false;
+            }
+            const aluno = await response.json();
+            document.getElementById('greeting').textContent = `Olá, ${aluno.name}!`;
+            return true;
+        }
+
+        document.getElementById('logout').addEventListener('click', async () => {
+            await fetch('/api/auth/logout', { method: 'POST' });
+            window.location.href = '/login.html';
+        });
+
+        loadProfile()
+            .then(ok => { if (ok) return loadTasks(); })
+            .catch(() => { status.textContent = 'Não foi possível carregar as tarefas.'; });
     </script>
 </body>
 </html>

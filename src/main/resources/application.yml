@@ -1,0 +1,24 @@
+server:
+  servlet:
+    session:
+      timeout: 12h
+      cookie:
+        http-only: true
+        same-site: lax
+        name: SALVALUNO_SESSION
+
+spring:
+  datasource:
+    url: jdbc:h2:file:./data/salvaluno;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: update
+    database-platform: org.hibernate.dialect.H2Dialect
+    open-in-view: false
+
+portal:
+  url: https://ea.uniceub.br/Sistema/Acesso/Login
+  salaOnline: "Sala Online (2025)"

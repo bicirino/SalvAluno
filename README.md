@@ -71,17 +71,17 @@ git clone <URL_DO_REPOSITORIO>
 cd SalvAluno
 ```
 
-### 2.) Configurar as credenciais do portal
+### 2.) Cadastrar o acesso ao portal
 
-Crie ou edite o arquivo `src/main/resources/application.properties` e informe os dados de acesso ao portal da instituição:
+O RA e a senha **não** ficam em variáveis de ambiente nem no `application.properties`. Com a aplicação no ar, abra `http://localhost:8080` e crie uma conta com **nome**, **RA** e **senha** do Espaço Aluno. Na próxima vez, entre só com RA e senha.
+
+A senha da conta é armazenada com hash BCrypt. A mesma senha, usada pelo robô no portal, fica cifrada com AES-256-GCM. A chave local é criada em `data/crypto.key`. A pasta `data/` (chave e banco) não deve ser publicada.
+
+O endereço do portal continua configurável, sem credenciais:
 
 ```properties
 portal.url=https://ea.uniceub.br/Sistema/Acesso/Login
-portal.RA=seu_RA
-portal.password=sua_senha
 ```
-
-Não versionar esse arquivo quando ele contiver credenciais reais. Para ambientes compartilhados, use as opções de configuração externa do Spring Boot ou um arquivo local ignorado pelo Git.
 
 ### 3.) Instalar os navegadores do Playwright
 
@@ -117,19 +117,9 @@ Quando a aplicação estiver em execução, acesse `http://localhost:8080`.
 
 ### 5.) Consultar e sincronizar tarefas
 
-Liste as tarefas já salvas:
+Entre na conta e use o botão **Sincronizar tarefas**. O robô autentica no portal com o RA e a senha cadastrados. As rotas `/api/tasks` exigem essa sessão: sem login, a API responde `401`.
 
-```bash
-curl http://localhost:8080/api/tasks
-```
-
-Inicie uma nova sincronização com o portal:
-
-```bash
-curl -X POST http://localhost:8080/api/tasks/sync
-```
-
-A sincronização é executada em segundo plano. Aguarde alguns instantes e consulte novamente `GET /api/tasks` para verificar as tarefas coletadas.
+A sincronização é executada em segundo plano. O painel mostra o nome cadastrado e, ao terminar, as tarefas daquele RA.
 
 ## 🐳 Execução com Docker
 
