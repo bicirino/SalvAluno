@@ -56,7 +56,11 @@
                 <span id="task-count" class="task-count">0 tarefas</span>
             </div>
             <p id="status" class="status-message" role="status"></p>
-            <ul id="tasks" class="task-list"><li class="empty-state">Carregando tarefas...</li></ul>
+            <p class="deadline-legend">
+                <span><i class="deadline-swatch deadline-swatch--urgent" aria-hidden="true"></i> até 2 semanas</span>
+                <span><i class="deadline-swatch deadline-swatch--soon" aria-hidden="true"></i> até 1 mês</span>
+            </p>
+            <div id="tasks" class="task-groups"><p class="empty-state">Carregando tarefas...</p></div>
         </section>
 
         <footer>SalvAluno <span>•</span> dados sincronizados do portal acadêmico</footer>
@@ -129,13 +133,106 @@
             return aguardarFimVarredura();
         }
 
+        function escapeHtml(value) {
+            return String(value ?? '')
+                .replaceAll('&', '&amp;')
+                .replaceAll('<', '&lt;')
+                .replaceAll('>', '&gt;')
+                .replaceAll('"', '&quot;')
+                .replaceAll("'", '&#39;');
+        }
+
+        function parseDueDate(value) {
+            if (!value) return null;
+            if (Array.isArray(value) && value.length >= 3) {
+                const [year, month, day, hour = 0, minute = 0] = value;
+                const date = new Date(year, month - 1, day, hour, minute);
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
+            const date = new Date(value);
+            return Number.isNaN(date.getTime()) ? null : date;
+        }
+
+        function startOfDay(date) {
+            return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+        }
+
+        function daysUntil(due) {
+            return Math.round((startOfDay(due) - startOfDay(new Date())) / 86400000);
+        }
+
+        function alertFor(due) {
+            if (!due) return null;
+            const days = daysUntil(due);
+            if (days <= 14) {
+                return {
+                    level: 'urgent',
+                    label: days < 0 ? 'Prazo vencido' : 'Prazo em até duas semanas'
+                };
+            }
+            if (days <= 30) {
+                return { level: 'soon', label: 'Prazo em até um mês' };
+            }
+            return null;
+        }
+
+        function formatDue(due) {
+            return due ? due.toLocaleDateString('pt-BR') : 'Sem data';
+        }
+
+        function alertIcon(alert) {
+            if (!alert) return '';
+            return `<span class="deadline-alert deadline-alert--${alert.level}" title="${escapeHtml(alert.label)}" aria-label="${escapeHtml(alert.label)}">
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                    <path d="M12 3.2 21.6 20.2H2.4L12 3.2z"></path>
+                    <path class="deadline-alert-mark" d="M11 9.2h2v6.1h-2zm0 7.4h2v2h-2z"></path>
+                </svg>
+            </span>`;
+        }
+
+        function renderTasks(data) {
+            taskCount.textContent = `${data.length} ${data.length === 1 ? 'tarefa' : 'tarefas'}`;
+            if (!data.length) {
+                tasks.innerHTML = '<p class="empty-state">Nenhuma tarefa sincronizada.</p>';
+                return;
+            }
+
+            const groups = new Map();
+            for (const task of data) {
+                const subject = (task.subject || '').trim() || 'Sem disciplina';
+                if (!groups.has(subject)) groups.set(subject, []);
+                groups.get(subject).push(task);
+            }
+
+            tasks.innerHTML = [...groups.entries()].map(([subject, items], index) => `
+                <section class="subject-group">
+                    <h3 class="subject-heading" id="subject-${index}">${escapeHtml(subject)}</h3>
+                    <ul class="task-list" aria-labelledby="subject-${index}">
+                        ${items.map(task => {
+                            const due = parseDueDate(task.dueDate);
+                            const alert = alertFor(due);
+                            return `<li class="task-item">
+                                <span class="task-marker"></span>
+                                <span class="task-copy">
+                                    <strong>${escapeHtml(task.title)}</strong>
+                                    <small>${escapeHtml(formatDue(due))}</small>
+                                </span>
+                                ${alertIcon(alert)}
+                            </li>`;
+                        }).join('')}
+                    </ul>
+                </section>
+            `).join('');
+        }
+
         async function loadTasks() {
             const response = await fetch('/api/tasks');
+            if (response.status === 401) {
+                window.location.replace('/login.html');
+                return;
+            }
             const data = await response.json();
-            taskCount.textContent = `${data.length} ${data.length === 1 ? 'tarefa' : 'tarefas'}`;
-            tasks.innerHTML = data.length
-                ? data.map(task => `<li class="task-item"><span class="task-marker"></span><span><strong>${task.title}</strong><small>${task.subject || 'Sem disciplina'}</small></span></li>`).join('')
-                : '<li class="empty-state">Nenhuma tarefa sincronizada.</li>';
+            renderTasks(data);
         }
 
         document.getElementById('sync').addEventListener('click', async () => {

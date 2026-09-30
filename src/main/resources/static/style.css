@@ -59,12 +59,27 @@ h2 { font-size: 24px; }
 .task-panel { min-height: 250px; border: 1px solid #e6ddec; border-radius: 16px; padding: 28px; background: #fff; box-shadow: 0 18px 45px #3d155b0d; }
 .task-count { color: var(--ceub-magenta); font-size: 12px; font-weight: 700; }
 .status-message { min-height: 20px; margin: 18px 0 0; color: #806d8b; font-size: 13px; }
-.task-list { display: grid; gap: 10px; margin: 4px 0 0; padding: 0; list-style: none; }
+.deadline-legend { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 0; color: #806d8b; font-size: 12px; }
+.deadline-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.deadline-swatch { width: 14px; height: 14px; flex: 0 0 auto; background: currentColor; clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.deadline-swatch--urgent { color: #d7263d; }
+.deadline-swatch--soon { color: #e3a008; }
+.task-groups { display: grid; gap: 28px; margin-top: 18px; }
+.subject-group { display: grid; gap: 10px; }
+.subject-heading { margin: 0; padding-bottom: 8px; border-bottom: 1px solid #edf0f6; color: var(--ceub-purple); font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600; letter-spacing: -.03em; }
+.task-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .task-item { display: flex; align-items: center; gap: 14px; border: 1px solid #edf0f6; border-radius: 10px; padding: 14px 16px; background: #fbfcfe; }
 .task-marker { width: 8px; height: 8px; flex: 0 0 auto; border-radius: 50%; background: var(--ceub-magenta); box-shadow: 0 0 0 5px #f7e5f1; }
+.task-copy { min-width: 0; flex: 1; }
 .task-item strong, .task-item small { display: block; }
 .task-item strong { font-size: 14px; }
 .task-item small { margin-top: 3px; color: #8793a8; font-size: 12px; }
+.deadline-alert { display: inline-flex; width: 16px; height: 16px; flex: 0 0 auto; margin-left: auto; }
+.deadline-alert svg { display: block; width: 16px; height: 16px; }
+.deadline-alert path:first-child { fill: currentColor; }
+.deadline-alert-mark { fill: #fff; }
+.deadline-alert--urgent { color: #d7263d; }
+.deadline-alert--soon { color: #e3a008; }
 .empty-state { padding: 28px 0; color: #8793a8; text-align: center; font-size: 14px; }
 footer { margin-top: 24px; color: #9aa6b8; text-align: center; font-size: 11px; }
 footer span { padding: 0 5px; color: #c4ccda; }
