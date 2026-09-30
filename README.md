@@ -8,51 +8,68 @@ Este projeto nasceu da necessidade de centralizar e automatizar a gestão de tar
 
 ### 🔄 Como Funciona o Fluxo de Dados
 
-1. **Gatilho (API REST)**: O utilizador ou interface faz um pedido `POST /api/tasks/sync`.
-2. **Automação (Playwright)**: O `ScrapperService` lança uma instância do navegador Chromium em *headless mode* e realiza o login automatizado no portal da instituição.
-3. **Extração de Cronograma**: O robô navega pelas disciplinas do aluno, acede às páginas de **Cronograma** e mapeia as linhas de atividades (`ul.content_cronogramadv`).
-4. **Tratamento e Parsing**: As datas no formato `DD/MM/YY` são convertidas para objetos `LocalDateTime` do Java.
-5. **Persistência**: As tarefas filtradas são salvas na base de dados através do `TaskRepository`.
-6. **Disponibilização**: As tarefas ficam prontas para consulta através do endpoint `GET /api/tasks`.
+1. **Acesso**: O aluno abre `http://localhost:8080`, faz **cadastro** ou **login** (nome, RA e senha do Espaço Aluno) em `login.html`.
+2. **Sessão**: O servidor cria a sessão (`SALVALUNO_SESSION`) e o dashboard exibe **Olá, [nome]!**.
+3. **Gatilho (API REST)**: Com sessão ativa, o usuário aciona `POST /api/tasks/sync`.
+4. **Automação (Playwright)**: O `ScrapperService` usa o **RA e a senha da conta logada** (não variáveis de ambiente) para login no portal em *headless mode*.
+5. **Extração de Cronograma**: O robô navega pelas disciplinas, acede às páginas de **Cronograma** e mapeia as linhas (`ul.content_cronogramadv`).
+6. **Tratamento e Parsing**: Datas `DD/MM/YY` viram `LocalDateTime`.
+7. **Persistência**: Tarefas são salvas com `ownerRa` do aluno; sync substitui as tarefas daquele RA via `TaskStore`.
+8. **Consulta**: `GET /api/tasks` devolve apenas as tarefas do aluno autenticado.
 
+Documentação detalhada da autenticação: [docs/AUTENTICACAO-E-LOGIN.md](docs/AUTENTICACAO-E-LOGIN.md).
 
 ## ✨ Principais Funcionalidades 
-- **Web Scraping / Automação** : Varredura automática do portal acadêmico via Playwright para coleta de tarefas, prazos e avisos.
-- **Gestão de Tarefas** : Exibição organizada dos compromissos por data de entrega, disciplina e prioridade.
-- **Alertas e Notificações** : Avisos na interface e através de mensagens para o usuário para tarefas com prazos próximos do vencimento.
-- **Interface do Usuário** : Painel simples e intuitivo para acompanhamento do progresso das atividades.
+- **Cadastro e login** : Tela alinhada ao dashboard; credenciais do portal guardadas com segurança.
+- **Web Scraping / Automação** : Varredura do portal acadêmico via Playwright com RA/senha do aluno logado.
+- **Gestão de Tarefas** : Listagem por aluno, ordenada por prazo.
+- **Interface do Usuário** : Painel com saudação personalizada, sync e logout.
 
 ## 🛠️ Stacks 
 - **Linguagem**: Java 17+
 - **Framework Principal**: Spring Boot 3.x
-  - **Spring Web**: Criação de endpoints RESTful.
-  - **Spring Data JPA**: Persistência e abstração de base de dados.
-- **Automação / Web Scraping**: Playwright for Java
-- **Base de Dados**:
-  - H2 Database (Memória / Desenvolvimento e Testes)
-  - Compatível com PostgreSQL / MySQL em Produção
+  - **Spring Web**: Endpoints REST e páginas estáticas.
+  - **Spring Data JPA**: Persistência (alunos + tarefas).
+  - **spring-security-crypto**: BCrypt (apenas hash; sem Spring Security completo).
+- **Automação**: Playwright for Java
+- **Base de Dados**: H2 em arquivo local (`data/salvaluno`)
 - **Build Tool**: Maven
-
 
 ## 📂 Estrutura do Projeto
 
 ```text
 salvAluno/
+├── docs/
+│   └── AUTENTICACAO-E-LOGIN.md     # Revisão e doc da tela de login
 ├── src/
 │   ├── main/
 │   │   ├── java/com/salvAluno/
-│   │   │   ├── SalvAlunoApplication.java    # Classe Principal Spring Boot
+│   │   │   ├── Application.java
 │   │   │   ├── controller/
-│   │   │   │   └── TaskController.java      # Endpoints da API REST
+│   │   │   │   ├── AuthController.java
+│   │   │   │   ├── TaskController.java
+│   │   │   │   └── ...
 │   │   │   ├── domain/
-│   │   │   │   └── Task.java                # Entidade de Domínio (JPA)
+│   │   │   │   ├── Student.java
+│   │   │   │   └── Task.java
 │   │   │   ├── repository/
-│   │   │   │   └── TaskRepository.java      # Interface de acesso ao Banco
+│   │   │   ├── security/
+│   │   │   │   ├── CredentialCipher.java
+│   │   │   │   └── SessionAuthFilter.java
 │   │   │   └── service/
-│   │   │       └── ScrapperService.java     # Lógica do Robô e Parse Web
+│   │   │       ├── AuthService.java
+│   │   │       ├── ScrapperService.java
+│   │   │       └── TaskStore.java
 │   │   └── resources/
-│   │       ├── application.properties      # Configurações locais
-│   │       └── application-example.properties # Modelo de configuração sem segredos
+│   │       ├── application.yml
+│   │       ├── application.properties.example
+│   │       └── static/
+│   │           ├── index.html
+│   │           ├── login.html
+│   │           └── style.css
+│   └── test/
+│       └── java/com/salvAluno/AuthFlowTest.java
+├── data/                             # gitignored: banco H2 + crypto.key
 ├── pom.xml
 └── README.md
 ```
@@ -73,11 +90,13 @@ cd SalvAluno
 
 ### 2.) Cadastrar o acesso ao portal
 
-O RA e a senha **não** ficam em variáveis de ambiente nem no `application.properties`. Com a aplicação no ar, abra `http://localhost:8080` e crie uma conta com **nome**, **RA** e **senha** do Espaço Aluno. Na próxima vez, entre só com RA e senha.
+O RA e a senha **não** ficam em variáveis de ambiente nem no `application.properties`. Com a aplicação no ar, abra `http://localhost:8080` e crie uma conta com **nome**, **RA** e **senha** do Espaço Aluno. Depois, entre só com RA e senha.
 
-A senha da conta é armazenada com hash BCrypt. A mesma senha, usada pelo robô no portal, fica cifrada com AES-256-GCM. A chave local é criada em `data/crypto.key`. A pasta `data/` (chave e banco) não deve ser publicada.
+- Senha do app: hash **BCrypt**
+- Senha do portal (robô): **AES-256-GCM**; chave em `data/crypto.key`
+- Pasta `data/` não deve ser versionada
 
-O endereço do portal continua configurável, sem credenciais:
+URL do portal (sem credenciais), em `application.yml` ou `application.properties`:
 
 ```properties
 portal.url=https://ea.uniceub.br/Sistema/Acesso/Login
@@ -85,42 +104,39 @@ portal.url=https://ea.uniceub.br/Sistema/Acesso/Login
 
 ### 3.) Instalar os navegadores do Playwright
 
-Na primeira configuração do projeto, instale o Chromium usado pelo robô:
-
 ```bash
 mvn exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
 ```
 
 ### 4.) Compilar e executar
 
-Para baixar as dependências e gerar o build:
-
 ```bash
-mvn clean install
-```
-
-Após a compilação, inicie a aplicação executando o arquivo JAR gerado:
-
-```bash
+mvn clean package
 java -jar target/salv-aluno-0.0.1-SNAPSHOT.jar
 ```
 
-O comando `mvn spring-boot:run` também pode ser usado em ambientes compatíveis:
+Acesse `http://localhost:8080`.
+
+### 5.) API rápida (com sessão após login)
+
+| Ação | Método | Rota |
+|------|--------|------|
+| Cadastro | POST | `/api/auth/register` |
+| Login | POST | `/api/auth/login` |
+| Perfil | GET | `/api/auth/me` |
+| Logout | POST | `/api/auth/logout` |
+| Listar tarefas | GET | `/api/tasks` |
+| Sincronizar | POST | `/api/tasks/sync` |
+| Status sync | GET | `/api/tasks/sync/status` |
+
+Sem sessão, `/api/tasks` retorna **401**.
+
+### 6.) Testes
 
 ```bash
-mvn spring-boot:run
+mvn test
 ```
-
-Neste projeto, a execução pelo JAR foi utilizada porque o `spring-boot:run` apresentou erro ao localizar a classe principal.
-
-Quando a aplicação estiver em execução, acesse `http://localhost:8080`.
-
-### 5.) Consultar e sincronizar tarefas
-
-Entre na conta e use o botão **Sincronizar tarefas**. O robô autentica no portal com o RA e a senha cadastrados. As rotas `/api/tasks` exigem essa sessão: sem login, a API responde `401`.
-
-A sincronização é executada em segundo plano. O painel mostra o nome cadastrado e, ao terminar, as tarefas daquele RA.
 
 ## 🐳 Execução com Docker
 
-Os arquivos `Dockerfile` e `docker-compose.yaml` estão reservados para execução conteinerizada. Antes de usar Docker, confirme que eles possuem a configuração da imagem Java, das dependências Maven e do navegador Chromium do Playwright.
+Os arquivos `Dockerfile` e `docker-compose.yaml` estão reservados para execução conteinerizada. Antes de usar Docker, confirme imagem Java, Maven, Playwright/Chromium e persistência de `data/` (banco + chave de criptografia).
