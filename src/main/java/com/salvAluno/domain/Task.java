@@ -19,17 +19,19 @@ public class Task {
 	private String subject;
 	private LocalDateTime dueDate;
 	private String url;
+	private String ownerRa;
 
     // Construtor protegido para uso pela JPA (Java Persistence API) 
 	protected Task() {
 	}
 
     // Construtor público para criar uma nova instância de Task com os atributos fornecidos
-	public Task(String title, String subject, LocalDateTime dueDate, String url) {
+	public Task(String title, String subject, LocalDateTime dueDate, String url, String ownerRa) {
 		this.title = title;
 		this.subject = subject;
 		this.dueDate = dueDate;
 		this.url = url;
+		this.ownerRa = ownerRa;
 	}
 
 	public Long getId() {
@@ -50,5 +52,9 @@ public class Task {
 
 	public String getUrl() {
 		return url;
+	}
+
+	public String getOwnerRa() {
+		return ownerRa;
 	}
 }

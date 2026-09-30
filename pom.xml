@@ -52,6 +52,12 @@
 			<version>${playwright.version}</version>
 		</dependency>
 
+        <!-- Hash de senha (BCrypt), sem ativar o formulário padrão do Spring Security -->
+		<dependency>
+			<groupId>org.springframework.security</groupId>
+			<artifactId>spring-security-crypto</artifactId>
+		</dependency>
+
         <!-- Dependências do Spring Boot Test (Testes unitários e de integração)-->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

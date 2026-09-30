@@ -11,7 +11,6 @@ import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
 import com.salvAluno.domain.Task;
-import com.salvAluno.repository.TaskRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -35,28 +34,19 @@ import java.util.regex.Pattern;
 public class ScrapperService { 
 
     // Versão do scrapper para fins de controle de versão 
-    private static final String SCRAPER_VERSION = "3.0.0";
+    private static final String SCRAPER_VERSION = "3.1.0";
 
     // Padrões de data para extrair a data do cronograma da Sala Online 
     private static final Pattern DATA_COMPLETA_4 = Pattern.compile("(\\d{2}/\\d{2}/\\d{4})");
     private static final Pattern DATA_COMPLETA_2 = Pattern.compile("(\\d{2}/\\d{2}/\\d{2})");
     private static final Pattern DATA_DIA_MES = Pattern.compile("(\\d{2}/\\d{2})(?!\\d|/)");
 
-    // Injeta o repositório para podermos guardar as tarefas diretamente no banco de dados 
-    @Autowired 
-    private TaskRepository taskRepository; 
+    @Autowired
+    private TaskStore taskStore;
 
-    // Injeta a URL do portal da faculdade, que será usada para fazer o scrapping 
+    // Injeta a URL do portal da faculdade, que será usada para fazer o scrapping
     @Value("${portal.url:https://ea.uniceub.br/Sistema/Acesso/Login}")
-    private String portalUrl; 
-
-    // Injeta o RA do usuário que será usado no login do portal da faculdade 
-    @Value("${portal.RA:seu_RA}") 
-    private String RA; 
-
-    // Injeta a senha do usuário que será usada no login do portal da faculdade 
-    @Value("${portal.password:sua_senha}")
-    private String password;
+    private String portalUrl;
 
     @Value("${portal.salaOnline:Sala Online (2025)}")
     private String salaOnlineLabel;
@@ -76,8 +66,10 @@ public class ScrapperService {
         syncMensagem = mensagem;
     }
 
-    // Método principal para o Scrapping 
-    public void scrapData(){ 
+    // Método principal para o Scrapping. 
+    public void scrapData(String ra, String senha) {
+        
+        // Se a sincronização já estiver em andamento, ignora a nova solicitação 
         if (!syncEmAndamento.compareAndSet(false, true)) {
             System.out.println("[Playwright] Sincronização já em andamento; ignorando nova solicitação.");
             return;
@@ -87,25 +79,20 @@ public class ScrapperService {
             System.out.println("Iniciando o scrapping de dados... [scraper=" + SCRAPER_VERSION + "]");
             atualizarSyncMensagem("Iniciando automação no portal…");
 
-            RA = RA.trim();
-            password = password.trim();
-
-            if (RA.isEmpty() || password.isEmpty() || "seu_RA".equals(RA) || "sua_senha".equals(password)) {
-                System.err.println("[Playwright] Credenciais do portal não configuradas. "
-                        + "Preencha portal.RA e portal.password em src/main/resources/application.properties "
-                        + "e gere o JAR novamente (mvn clean package), ou coloque application.properties na pasta do JAR.");
-                atualizarSyncMensagem("Credenciais do portal não configuradas.");
+            if (ra == null || senha == null || ra.isBlank() || senha.isBlank()) {
+                System.err.println("[Playwright] RA ou senha do aluno não informados.");
+                atualizarSyncMensagem("RA ou senha do aluno não informados.");
                 return;
             }
 
-            executarScraping();
+            executarScraping(ra.trim(), senha);
         } finally {
             syncEmAndamento.set(false);
             syncMensagem = "";
         }
     }
 
-    private void executarScraping() {
+    private void executarScraping(String ra, String senha) {
         try (Playwright playwright = Playwright.create()) { 
 
             // Cria instância Chromium do Playwright   
@@ -123,8 +110,8 @@ public class ScrapperService {
                 System.out.println("[Playwright] Acessando a página de login: " + portalUrl);
                 page.navigate(portalUrl); 
 
-                page.fill("#coAcesso", RA); 
-                page.fill("#coSenha", password); 
+                page.fill("#coAcesso", ra);
+                page.fill("#coSenha", senha); 
 
                 page.click("#btn-login");
                 page.waitForURL(
@@ -153,18 +140,27 @@ public class ScrapperService {
                 System.out.println("[Playwright] Matérias encontradas: " + quantidadeMaterias);
                 atualizarSyncMensagem("Encontradas " + quantidadeMaterias + " disciplinas. Lendo cronogramas…");
 
+                // Variável para contar o índice da disciplina atual 
                 int indice = 0;
+                // Loop para percorrer todas disciplinas encontradas
                 for (DisciplinaPortal disciplina : disciplinas) {
                     indice++;
                     atualizarSyncMensagem("Cronograma " + indice + " de " + quantidadeMaterias + ": " + disciplina.nome());
                     System.out.println("[Playwright] Processando curso: " + disciplina.nome());
+                    
+                    // Navega para a página da disciplina 
                     salaOnline.navigate(disciplina.url());
+                    // Espera o carregamento da página  
                     salaOnline.waitForLoadState();
+                    // Espera 800ms para garantir que a página foi carregada 
                     salaOnline.waitForTimeout(800);
 
+                    // Pega o nome da disciplina 
                     String nomeMateria = resolverNomeDisciplina(salaOnline, disciplina);
 
+                    // Pega o link do cronograma da disciplina  
                     ElementHandle linkCronograma = salaOnline.querySelector("h3.overviewCard-title a[title='Cronograma']");
+                    
                     if (linkCronograma == null) {
                         if (!disciplina.administrativa()) {
                             System.out.println("[Playwright] Nenhum cronograma encontrado para a matéria: " + nomeMateria);
@@ -172,16 +168,26 @@ public class ScrapperService {
                         continue;
                     }
 
+                    // Clica no link do cronograma 
                     linkCronograma.click();
+                    // Espera carregamento da página do sala online 
                     salaOnline.waitForLoadState();
 
+                    // Pega cada linha do cronograma 
                     List<ElementHandle> linhasCronograma = salaOnline.querySelectorAll("ul.content_cronogramadv");
 
+                    // Loop para percorrer cada linha encontrada do cronograma  
                     for (ElementHandle linha : linhasCronograma) {
+                        // Pega cada coluna da linha 
                         List<ElementHandle> colunas = linha.querySelectorAll("li");
-
+                        
+                        // Verifica se o número de colunas é maior ou igual a 3 
+                        // Se for, pega o título da atividade e a data do prazo
                         if (colunas.size() >= 3) {
+
+                            // Pega o título da atividade | o "innerText" é o texto da tag 
                             String tituloAtividade = colunas.get(0).innerText().trim();
+                            // Se o título da atividade estiver em branco, continua para a próxima linha 
                             if (tituloAtividade.isBlank()) {
                                 continue;
                             }
@@ -190,7 +196,7 @@ public class ScrapperService {
 
                             if (prazoFinal != null) {
                                 String urlCronograma = salaOnline.url();
-                                Task task = new Task(tituloAtividade, nomeMateria, prazoFinal, urlCronograma);
+                                Task task = new Task(tituloAtividade, nomeMateria, prazoFinal, urlCronograma, ra);
                                 tarefasEncontradas.add(task);
 
                                 System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade + " | Prazo: " + dataPrazoStr);
@@ -203,11 +209,10 @@ public class ScrapperService {
                 }
 
                 atualizarSyncMensagem("Salvando tarefas no aplicativo…");
-                if (tarefasEncontradas.isEmpty()){ 
-                    System.out.println("[Playwright] Nenhuma tarefa encontrada"); 
-                } else { 
-                    taskRepository.saveAll(tarefasEncontradas);
-
+                taskStore.substituirDoAluno(ra, tarefasEncontradas);
+                if (tarefasEncontradas.isEmpty()) {
+                    System.out.println("[Playwright] Nenhuma tarefa encontrada");
+                } else {
                     System.out.println("[Playwright] Tarefas armazenadas: " + tarefasEncontradas.size());
                 }
                 atualizarSyncMensagem("Sincronização concluída.");

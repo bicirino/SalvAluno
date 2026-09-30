@@ -1,6 +1,7 @@
 # Segurança e Credenciais 
 .env 
 application.properties 
+data/
 target/
 
 # IDES e Editores 
