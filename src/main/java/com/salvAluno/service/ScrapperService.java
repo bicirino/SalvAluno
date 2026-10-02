@@ -10,22 +10,20 @@ import com.microsoft.playwright.ElementHandle;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+import com.microsoft.playwright.TimeoutError;
+import com.microsoft.playwright.options.WaitUntilState;
 import com.salvAluno.domain.Task;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 // Outras importações necessárias para o Java 
-import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
-import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 // A tag @Service indica que esta classe é um serviço do Spring, permitindo que seja injetada em outras partes da aplicação.
@@ -34,12 +32,8 @@ import java.util.regex.Pattern;
 public class ScrapperService { 
 
     // Versão do scrapper para fins de controle de versão 
-    private static final String SCRAPER_VERSION = "3.1.0";
-
-    // Padrões de data para extrair a data do cronograma da Sala Online 
-    private static final Pattern DATA_COMPLETA_4 = Pattern.compile("(\\d{2}/\\d{2}/\\d{4})");
-    private static final Pattern DATA_COMPLETA_2 = Pattern.compile("(\\d{2}/\\d{2}/\\d{2})");
-    private static final Pattern DATA_DIA_MES = Pattern.compile("(\\d{2}/\\d{2})(?!\\d|/)");
+    private static final String SCRAPER_VERSION = "3.2.1";
+    private static final Pattern SALA_ONLINE_LINK = Pattern.compile("Sala Online \\(\\d{4}\\)");
 
     @Autowired
     private TaskStore taskStore;
@@ -51,8 +45,12 @@ public class ScrapperService {
     @Value("${portal.salaOnline:Sala Online (2025)}")
     private String salaOnlineLabel;
 
+    @Value("${portal.loginTimeoutMs:90000}")
+    private long loginTimeoutMs;
+
     private final AtomicBoolean syncEmAndamento = new AtomicBoolean(false);
     private volatile String syncMensagem = "";
+    private volatile String ultimaSyncResultado = "";
 
     public boolean isSyncEmAndamento() {
         return syncEmAndamento.get();
@@ -60,6 +58,10 @@ public class ScrapperService {
 
     public String getSyncMensagem() {
         return syncMensagem;
+    }
+
+    public String getUltimaSyncResultado() {
+        return ultimaSyncResultado;
     }
 
     private void atualizarSyncMensagem(String mensagem) {
@@ -77,22 +79,26 @@ public class ScrapperService {
 
         try {
             System.out.println("Iniciando o scrapping de dados... [scraper=" + SCRAPER_VERSION + "]");
+            ultimaSyncResultado = "";
             atualizarSyncMensagem("Iniciando automação no portal…");
 
             if (ra == null || senha == null || ra.isBlank() || senha.isBlank()) {
                 System.err.println("[Playwright] RA ou senha do aluno não informados.");
-                atualizarSyncMensagem("RA ou senha do aluno não informados.");
+                ultimaSyncResultado = "RA ou senha do portal não disponíveis. Saia e entre de novo no SalvAluno.";
+                atualizarSyncMensagem(ultimaSyncResultado);
                 return;
             }
 
-            executarScraping(ra.trim(), senha);
+            if (executarScraping(ra.trim(), senha)) {
+                ultimaSyncResultado = "sucesso";
+            }
         } finally {
             syncEmAndamento.set(false);
             syncMensagem = "";
         }
     }
 
-    private void executarScraping(String ra, String senha) {
+    private boolean executarScraping(String ra, String senha) {
         try (Playwright playwright = Playwright.create()) { 
 
             // Cria instância Chromium do Playwright   
@@ -108,17 +114,7 @@ public class ScrapperService {
 
                 atualizarSyncMensagem("Acessando o Espaço Aluno…");
                 System.out.println("[Playwright] Acessando a página de login: " + portalUrl);
-                page.navigate(portalUrl); 
-
-                page.fill("#coAcesso", ra);
-                page.fill("#coSenha", senha); 
-
-                page.click("#btn-login");
-                page.waitForURL(
-                        url -> !url.contains("/Sistema/Acesso/Login"),
-                        new Page.WaitForURLOptions().setTimeout(30_000)
-                );
-                page.waitForLoadState();
+                realizarLogin(page, ra, senha);
 
                 System.out.println("[Playwright] Login realizado. URL: " + page.url());
                 atualizarSyncMensagem("Abrindo a Sala Online…");
@@ -182,24 +178,29 @@ public class ScrapperService {
                         List<ElementHandle> colunas = linha.querySelectorAll("li");
                         
                         // Verifica se o número de colunas é maior ou igual a 3 
-                        // Se for, pega o título da atividade e a data do prazo
+                        // Colunas: atividade, data de início e data de término
                         if (colunas.size() >= 3) {
 
-                            // Pega o título da atividade | o "innerText" é o texto da tag 
-                            String tituloAtividade = colunas.get(0).innerText().trim();
-                            // Se o título da atividade estiver em branco, continua para a próxima linha 
+                            List<String> textos = new ArrayList<>();
+                            for (ElementHandle coluna : colunas) {
+                                textos.add(normalizarTexto(coluna.innerText()));
+                            }
+
+                            String tituloAtividade = textos.get(0);
                             if (tituloAtividade.isBlank()) {
                                 continue;
                             }
-                            String dataPrazoStr = extrairTextoData(colunas);
-                            LocalDateTime prazoFinal = converterDataPrazo(dataPrazoStr);
 
-                            if (prazoFinal != null) {
+                            CronogramaDatas.Periodo periodo = CronogramaDatas.interpretar(textos);
+                            if (periodo != null) {
+                                LocalDateTime inicio = periodo.inicio().atStartOfDay();
+                                LocalDateTime prazoFinal = periodo.fim().atTime(23, 59);
                                 String urlCronograma = salaOnline.url();
-                                Task task = new Task(tituloAtividade, nomeMateria, prazoFinal, urlCronograma, ra);
+                                Task task = new Task(tituloAtividade, nomeMateria, inicio, prazoFinal, urlCronograma, ra);
                                 tarefasEncontradas.add(task);
 
-                                System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade + " | Prazo: " + dataPrazoStr);
+                                System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade
+                                        + " | Início: " + periodo.inicio() + " | Término: " + periodo.fim());
                             }
                         }
                     }
@@ -216,36 +217,73 @@ public class ScrapperService {
                     System.out.println("[Playwright] Tarefas armazenadas: " + tarefasEncontradas.size());
                 }
                 atualizarSyncMensagem("Sincronização concluída.");
+                return true;
 
-
-            }catch (Exception e) { 
+            } catch (Exception e) {
+                ultimaSyncResultado = mensagemErroSync(e);
                 System.err.println("[Playwright] Erro durante a execução do scraping: " + e.getMessage());
-                e.printStackTrace(); 
+                e.printStackTrace();
+                return false;
 
-            }finally{ 
-                browser.close(); 
+            } finally {
+                browser.close();
                 System.out.println("[Playwright] Varredura finalizada.");
             }
 
-        } catch (Exception e) { 
-            System.err.println("[Playwright] Erro ao iniciar o Playwright: " + e.getMessage()); 
+        } catch (Exception e) {
+            ultimaSyncResultado = mensagemErroSync(e);
+            System.err.println("[Playwright] Erro ao iniciar o Playwright: " + e.getMessage());
+            return false;
         }
-    } 
+    }
 
+    private void realizarLogin(Page page, String ra, String senha) {
+        page.navigate(portalUrl, new Page.NavigateOptions()
+                .setWaitUntil(WaitUntilState.DOMCONTENTLOADED)
+                .setTimeout(60_000));
+        page.locator("#coAcesso").waitFor(new Locator.WaitForOptions().setTimeout(30_000));
+        page.locator("#coAcesso").fill(ra);
+        page.locator("#coSenha").fill(senha);
+        page.locator("#btn-login").click();
+        page.waitForURL(
+                url -> !url.contains("/Sistema/Acesso/Login"),
+                new Page.WaitForURLOptions().setTimeout(loginTimeoutMs)
+        );
+        page.waitForLoadState();
+    }
+
+    private String mensagemErroSync(Exception e) {
+        if (e instanceof TimeoutError) {
+            return "Não foi possível entrar no Espaço Aluno a tempo. Confira RA e senha do portal (saia e entre de novo) ou tente mais tarde.";
+        }
+        String msg = e.getMessage();
+        if (msg != null && msg.toLowerCase().contains("timeout")) {
+            return "Não foi possível entrar no Espaço Aluno a tempo. Confira RA e senha do portal (saia e entre de novo) ou tente mais tarde.";
+        }
+        return "Erro na sincronização. Tente novamente em instantes.";
+    }
+
+    private Locator linkSalaOnline(Page espacoAluno) {
+        Locator porAno = espacoAluno.getByText(SALA_ONLINE_LINK);
+        if (porAno.count() > 0) {
+            return porAno.first();
+        }
+        return espacoAluno.getByText(salaOnlineLabel, new Page.GetByTextOptions().setExact(true));
+    }
 
     private Page abrirSalaOnline(Page espacoAluno) {
-        var salaOnlineTexto = new Page.GetByTextOptions().setExact(true);
+        Locator link = linkSalaOnline(espacoAluno);
         try {
             Page popup = espacoAluno.context().waitForPage(
                     new com.microsoft.playwright.BrowserContext.WaitForPageOptions().setTimeout(15_000),
-                    () -> espacoAluno.getByText(salaOnlineLabel, salaOnlineTexto).click()
+                    link::click
             );
             popup.waitForLoadState();
             System.out.println("[Playwright] Sala Online aberta em nova aba: " + popup.url());
             return popup;
         } catch (Exception e) {
             System.out.println("[Playwright] Popup não detectado, tentando mesma aba: " + e.getMessage());
-            espacoAluno.getByText(salaOnlineLabel, salaOnlineTexto).click();
+            link.click();
             espacoAluno.waitForLoadState();
             System.out.println("[Playwright] Sala Online na mesma aba: " + espacoAluno.url());
             return espacoAluno;
@@ -283,97 +321,6 @@ public class ScrapperService {
             disciplinas.add(new DisciplinaPortal(href, nome, administrativa));
         }
         return disciplinas;
-    }
-
-    private String extrairTextoData(List<ElementHandle> colunas) {
-        String melhorTexto = "";
-        int melhorPontuacao = 0;
-        for (ElementHandle coluna : colunas) {
-            String texto = normalizarTexto(coluna.innerText());
-            int pontuacao = pontuacaoTextoData(texto);
-            if (pontuacao > melhorPontuacao) {
-                melhorPontuacao = pontuacao;
-                melhorTexto = texto;
-            }
-        }
-        return melhorTexto;
-    }
-
-    private int pontuacaoTextoData(String texto) {
-        if (texto.isBlank()) {
-            return 0;
-        }
-        if (DATA_COMPLETA_4.matcher(texto).find()) {
-            return 4;
-        }
-        if (DATA_COMPLETA_2.matcher(texto).find()) {
-            return 3;
-        }
-        if (DATA_DIA_MES.matcher(texto).find()) {
-            return 2;
-        }
-        return 0;
-    }
-
-    private boolean contemPadraoData(String texto) {
-        if (texto == null || texto.isBlank()) {
-            return false;
-        }
-        return DATA_COMPLETA_4.matcher(texto).find()
-                || DATA_COMPLETA_2.matcher(texto).find()
-                || DATA_DIA_MES.matcher(texto).find();
-    }
-
-    private LocalDateTime converterDataPrazo(String dataStr) {
-        dataStr = normalizarTexto(dataStr);
-        if (dataStr.isBlank()) {
-            return null;
-        }
-
-        try {
-            LocalDate data = parseDataPortal(dataStr);
-            return data.atTime(23, 59);
-        } catch (RuntimeException e) {
-            if (contemPadraoData(dataStr)) {
-                System.err.println("[Playwright] Erro ao converter a data: " + dataStr);
-            }
-            return null;
-        }
-    }
-
-    /** Usa a última data encontrada no texto (ex.: "06/08 a 09/08/26" → término). */
-    private LocalDate parseDataPortal(String dataStr) {
-        dataStr = normalizarTexto(dataStr);
-        LocalDate ultima = null;
-
-        Matcher comAno4 = DATA_COMPLETA_4.matcher(dataStr);
-        while (comAno4.find()) {
-            ultima = LocalDate.parse(comAno4.group(1), DateTimeFormatter.ofPattern("dd/MM/yyyy"));
-        }
-        if (ultima != null) {
-            return ultima;
-        }
-
-        Matcher comAno2 = DATA_COMPLETA_2.matcher(dataStr);
-        while (comAno2.find()) {
-            ultima = LocalDate.parse(comAno2.group(1), DateTimeFormatter.ofPattern("dd/MM/yy"));
-        }
-        if (ultima != null) {
-            return ultima;
-        }
-
-        Matcher diaMes = DATA_DIA_MES.matcher(dataStr);
-        while (diaMes.find()) {
-            String[] partes = diaMes.group(1).split("/");
-            int dia = Integer.parseInt(partes[0]);
-            int mes = Integer.parseInt(partes[1]);
-            ultima = inferirAno(dia, mes);
-        }
-        if (ultima != null) {
-            return ultima;
-        }
-
-        throw new DateTimeParseException("Formato de data não reconhecido", dataStr, 0);
     }
 
     private String resolverNomeDisciplina(Page salaOnline, DisciplinaPortal disciplina) {
@@ -414,18 +361,6 @@ public class ScrapperService {
         return texto.replace('\u00a0', ' ')
                 .replaceAll("\\s+", " ")
                 .trim();
-    }
-
-    /** Semestre letivo: datas dd/MM costumam omitir o ano no cronograma CEUB. */
-    private LocalDate inferirAno(int dia, int mes) {
-        LocalDate hoje = LocalDate.now();
-        LocalDate candidata = LocalDate.of(hoje.getYear(), mes, dia);
-        if (candidata.isBefore(hoje.minusMonths(4))) {
-            candidata = candidata.plusYears(1);
-        } else if (candidata.isAfter(hoje.plusMonths(10))) {
-            candidata = candidata.minusYears(1);
-        }
-        return candidata;
     }
 
     private record DisciplinaPortal(String url, String nome, boolean administrativa) {}

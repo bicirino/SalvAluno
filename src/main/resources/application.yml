@@ -22,3 +22,4 @@ spring:
 portal:
   url: https://ea.uniceub.br/Sistema/Acesso/Login
   salaOnline: "Sala Online (2025)"
+  loginTimeoutMs: 90000

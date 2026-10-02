@@ -103,6 +103,16 @@
             return false;
         }
 
+        function mensagemResultadoSync(data) {
+            if (data.lastResult === 'sucesso') {
+                return 'Sincronização concluída.';
+            }
+            if (data.lastResult && data.lastResult !== 'sucesso') {
+                return data.lastResult;
+            }
+            return 'A varredura terminou, mas não foi possível confirmar o resultado.';
+        }
+
         /** Mantém o loading até a varredura terminar de fato (running=false confirmado). */
         async function aguardarFimVarredura() {
             const limiteMs = 10 * 60 * 1000;
@@ -180,6 +190,18 @@
             return due ? due.toLocaleDateString('pt-BR') : 'Sem data';
         }
 
+        /** Exibe o intervalo do cronograma. Alertas e encerramento usam só a data final. */
+        function formatPeriod(task) {
+            const start = parseDueDate(task.startDate);
+            const end = parseDueDate(task.dueDate);
+            const inicio = start ? formatDue(start) : null;
+            const fim = end ? formatDue(end) : null;
+            if (inicio && fim && inicio !== fim) {
+                return `${inicio} - ${fim}`;
+            }
+            return fim || inicio || 'Sem data';
+        }
+
         function alertIcon(alert) {
             if (!alert) return '';
             return `<span class="deadline-alert deadline-alert--${alert.level}" title="${escapeHtml(alert.label)}" aria-label="${escapeHtml(alert.label)}">
@@ -203,7 +225,7 @@
                 <span class="task-marker"></span>
                 <span class="task-copy">
                     <strong>${escapeHtml(task.title)}</strong>
-                    <small>${escapeHtml(formatDue(due))}</small>
+                    <small>${escapeHtml(formatPeriod(task))}</small>
                 </span>
                 ${alertIcon(alert)}
             </li>`;
@@ -277,8 +299,9 @@
                 if (response.status === 409) {
                     status.textContent = body;
                     const concluiu = await aguardarVarreduraCompleta(true);
+                    const resultado = await fetchSyncStatus();
                     status.textContent = concluiu
-                        ? 'Sincronização concluída.'
+                        ? mensagemResultadoSync(resultado)
                         : 'A varredura demorou mais que o esperado.';
                 } else if (!response.ok) {
                     status.textContent = 'Não foi possível iniciar a sincronização.';
@@ -286,8 +309,9 @@
                 } else {
                     status.textContent = 'Varredura em andamento…';
                     const concluiu = await aguardarVarreduraCompleta(false);
+                    const resultado = await fetchSyncStatus();
                     status.textContent = concluiu
-                        ? 'Sincronização concluída.'
+                        ? mensagemResultadoSync(resultado)
                         : 'A varredura demorou mais que o esperado. Tente sincronizar novamente.';
                 }
 
