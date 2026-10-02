@@ -1,3 +1,3 @@
-package com.salvAluno.controller;
-
-public record SyncStatusResponse(boolean running, String message, long taskCount) {}
+package com.salvAluno.controller;
+
+public record SyncStatusResponse(boolean running, String message, long taskCount, String lastResult) {}
