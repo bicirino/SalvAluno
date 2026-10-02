@@ -190,6 +190,39 @@
             </span>`;
         }
 
+        /** Prazo anterior a hoje: a entrega já encerrou. O dia de hoje continua em aberto. */
+        function isClosed(task) {
+            const due = parseDueDate(task.dueDate);
+            return due != null && daysUntil(due) < 0;
+        }
+
+        function renderTaskItem(task, closed) {
+            const due = parseDueDate(task.dueDate);
+            const alert = closed ? null : alertFor(due);
+            return `<li class="task-item${closed ? ' task-item--closed' : ''}">
+                <span class="task-marker"></span>
+                <span class="task-copy">
+                    <strong>${escapeHtml(task.title)}</strong>
+                    <small>${escapeHtml(formatDue(due))}</small>
+                </span>
+                ${alertIcon(alert)}
+            </li>`;
+        }
+
+        function renderClosedTasks(items, subjectId) {
+            if (!items.length) return '';
+            const countLabel = items.length === 1 ? '1 tarefa encerrada' : `${items.length} tarefas encerradas`;
+            return `<details class="closed-tasks">
+                <summary aria-label="${escapeHtml(countLabel)}">
+                    <span class="closed-label">Tarefas Encerradas</span>
+                    <span class="closed-count">${items.length}</span>
+                </summary>
+                <ul class="task-list" aria-labelledby="${subjectId}">
+                    ${items.map(task => renderTaskItem(task, true)).join('')}
+                </ul>
+            </details>`;
+        }
+
         function renderTasks(data) {
             taskCount.textContent = `${data.length} ${data.length === 1 ? 'tarefa' : 'tarefas'}`;
             if (!data.length) {
@@ -204,25 +237,21 @@
                 groups.get(subject).push(task);
             }
 
-            tasks.innerHTML = [...groups.entries()].map(([subject, items], index) => `
-                <section class="subject-group">
-                    <h3 class="subject-heading" id="subject-${index}">${escapeHtml(subject)}</h3>
-                    <ul class="task-list" aria-labelledby="subject-${index}">
-                        ${items.map(task => {
-                            const due = parseDueDate(task.dueDate);
-                            const alert = alertFor(due);
-                            return `<li class="task-item">
-                                <span class="task-marker"></span>
-                                <span class="task-copy">
-                                    <strong>${escapeHtml(task.title)}</strong>
-                                    <small>${escapeHtml(formatDue(due))}</small>
-                                </span>
-                                ${alertIcon(alert)}
-                            </li>`;
-                        }).join('')}
-                    </ul>
-                </section>
-            `).join('');
+            tasks.innerHTML = [...groups.entries()].map(([subject, items], index) => {
+                const openItems = items.filter(task => !isClosed(task));
+                const closedItems = items.filter(task => isClosed(task));
+                const subjectId = `subject-${index}`;
+                const openList = openItems.length
+                    ? `<ul class="task-list" aria-labelledby="${subjectId}">
+                        ${openItems.map(task => renderTaskItem(task, false)).join('')}
+                    </ul>`
+                    : '';
+                return `<section class="subject-group">
+                    <h3 class="subject-heading" id="${subjectId}">${escapeHtml(subject)}</h3>
+                    ${openList}
+                    ${renderClosedTasks(closedItems, subjectId)}
+                </section>`;
+            }).join('');
         }
 
         async function loadTasks() {

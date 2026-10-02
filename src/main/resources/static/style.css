@@ -12,6 +12,7 @@
 }
 
 * { box-sizing: border-box; }
+
 body { min-width: 320px; min-height: 100vh; margin: 0; background: radial-gradient(circle at 85% 0%, #f1e4f1 0, #f8f6fa 38rem); }
 .loading-screen { position: fixed; inset: 0; z-index: 10; display: grid; place-items: center; padding: 24px; background: #271736d9; opacity: 0; pointer-events: none; transition: opacity .25s ease; }
 .loading-screen.is-visible { opacity: 1; pointer-events: auto; }
@@ -74,6 +75,19 @@ h2 { font-size: 24px; }
 .task-item strong, .task-item small { display: block; }
 .task-item strong { font-size: 14px; }
 .task-item small { margin-top: 3px; color: #8793a8; font-size: 12px; }
+.task-item--closed { background: #f7f4f8; }
+.task-item--closed .task-marker { background: #b7a8c4; box-shadow: 0 0 0 5px #efe8f3; }
+.task-item--closed strong { color: #6d5c7a; font-weight: 500; }
+.closed-tasks { border: 0; background: none; }
+.closed-tasks summary { display: inline-flex; align-items: center; gap: 6px; padding: 2px 0; color: #c5ccd6; cursor: pointer; list-style: none; font-size: 12px; font-weight: 400; }
+.closed-tasks summary::-webkit-details-marker { display: none; }
+.closed-tasks summary::marker { content: ""; }
+.closed-tasks summary::before { content: ''; width: 4px; height: 4px; flex: 0 0 auto; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); }
+.closed-tasks[open] summary::before { transform: rotate(45deg); }
+.closed-tasks summary:hover { color: #9aa3b2; }
+.closed-label, .closed-count { color: inherit; background: none; font: inherit; font-weight: 400; }
+.closed-count { margin: 0; min-width: 0; padding: 0; }
+.closed-tasks .task-list { padding: 0 12px 12px; }
 .deadline-alert { display: inline-flex; width: 16px; height: 16px; flex: 0 0 auto; margin-left: auto; }
 .deadline-alert svg { display: block; width: 16px; height: 16px; }
 .deadline-alert path:first-child { fill: currentColor; }
