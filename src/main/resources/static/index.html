@@ -190,7 +190,7 @@
             return due ? due.toLocaleDateString('pt-BR') : 'Sem data';
         }
 
-        /** Exibe o intervalo do cronograma. Alertas e encerramento usam só a data final. */
+        /** Exibe o intervalo da atividade. Alertas e encerramento usam só a data final. */
         function formatPeriod(task) {
             const start = parseDueDate(task.startDate);
             const end = parseDueDate(task.dueDate);

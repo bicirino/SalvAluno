@@ -6,7 +6,6 @@ package com.salvAluno.service;
 // Importações necessárias para o funcionamento do serviço de scrapping
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserType;
-import com.microsoft.playwright.ElementHandle;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
@@ -22,6 +21,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
@@ -32,7 +32,124 @@ import java.util.regex.Pattern;
 public class ScrapperService { 
 
     // Versão do scrapper para fins de controle de versão 
-    private static final String SCRAPER_VERSION = "3.2.1";
+    private static final String SCRAPER_VERSION = "3.5.0";
+
+    /** Percorre a sala inteira e separa atividade de material de apoio. */
+    private static final String SCRIPT_ATIVIDADES = """
+            () => {
+              const limpar = (el) => {
+                if (!el) return '';
+                const clone = el.cloneNode(true);
+                clone.querySelectorAll('.accesshide, .sr-only').forEach((n) => n.remove());
+                return (clone.innerText || '').replace(/\\s+/g, ' ').trim();
+              };
+              const APOIO = new Set(['resource', 'url', 'folder', 'page', 'book', 'label', 'imscp']);
+              const raizAtividade = (el) => !(el.parentElement && el.parentElement.closest('li.activity, div.activity, .activity-item'));
+              const moduloDe = (el, href) => {
+                const classe = typeof el.className === 'string' ? el.className : '';
+                const pelaClasse = classe.match(/modtype_([a-z0-9]+)/);
+                if (pelaClasse) return pelaClasse[1];
+                const tipo = el.getAttribute('data-type') || el.getAttribute('data-modname');
+                if (tipo) return tipo;
+                const pelaUrl = (href || '').match(/\\/mod\\/([a-z0-9]+)\\//);
+                return pelaUrl ? pelaUrl[1] : '';
+              };
+              const tituloDe = (el) => {
+                const nome = el.getAttribute('data-activityname');
+                if (nome && nome.trim()) return nome.trim();
+                const rotulo = el.querySelector('.instancename, .activityname, .courseindex-link') || el.querySelector('a[href*="/mod/"]');
+                return limpar(rotulo);
+              };
+
+              const ROTULO_PRAZO = '(aberto|aberta|abre|fechado|fechada|fecha|encerra|encerrado|data de entrega|vence em)';
+              const PRAZO_EXTENSO = new RegExp(
+                ROTULO_PRAZO + '\\\\s*:\\\\s*(?:\\\\p{L}+(?:-\\\\p{L}+)?,\\\\s*)?\\\\d{1,2}\\\\s+(?:de\\\\s+)?\\\\p{L}+\\\\.?(?:\\\\s+de)?\\\\s+\\\\d{4}(?:\\\\s*,\\\\s*\\\\d{1,2}\\\\s*:\\\\s*\\\\d{2})?',
+                'giu'
+              );
+              const PRAZO_NUMERICO = new RegExp(
+                ROTULO_PRAZO + '\\\\s*:\\\\s*\\\\d{1,2}/\\\\d{1,2}/\\\\d{2,4}(?:\\\\s*,?\\\\s*\\\\d{1,2}\\\\s*:\\\\s*\\\\d{2})?',
+                'gi'
+              );
+              const normalizarRotulo = (trecho) => trecho
+                .replace(/^(aberta|abre)\\b/i, 'Aberto')
+                .replace(/^(fechada|fecha|encerra|encerrado|data de entrega|vence em)\\b/i, 'Fechado');
+              const extrairPrazo = (texto) => {
+                if (!texto) return '';
+                const achados = [];
+                for (const regra of [PRAZO_EXTENSO, PRAZO_NUMERICO]) {
+                  regra.lastIndex = 0;
+                  const encontrados = texto.match(regra);
+                  if (encontrados) achados.push(...encontrados);
+                }
+                return [...new Set(achados.map(normalizarRotulo))].join('\\n');
+              };
+              const textoSemAtividades = (el) => {
+                if (!el) return '';
+                const clone = el.cloneNode(true);
+                clone.querySelectorAll('li.activity, div.activity, .activity-item, .courseindex, nav').forEach((n) => n.remove());
+                return limpar(clone);
+              };
+
+              const raiz = document.querySelector('#region-main')
+                || document.querySelector('[role="main"]')
+                || document.body;
+              const eventos = [];
+              const atividades = [...raiz.querySelectorAll('li.activity, div.activity, .activity-item')]
+                .filter((el) => raizAtividade(el) && !el.closest('.courseindex, nav'));
+              const blocosDePrazo = [...raiz.querySelectorAll('p, div, li, span, h3, h4')].filter((el) => {
+                if (el.closest('li.activity, div.activity, .activity-item, .courseindex, nav')) return false;
+                const texto = limpar(el);
+                if (!extrairPrazo(texto) || texto.length > 700) return false;
+                return ![...el.children].some((filho) => extrairPrazo(limpar(filho)));
+              });
+              const ordenados = [...atividades, ...blocosDePrazo].sort((a, b) => {
+                if (a === b) return 0;
+                return a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1;
+              });
+
+              let secaoAtual = null;
+              for (const no of ordenados) {
+                const secao = no.closest('li.section, div.course-section');
+                if (secao !== secaoAtual) {
+                  secaoAtual = secao;
+                  eventos.push({ tipo: 'periodo', origem: 'secao', texto: extrairPrazo(textoSemAtividades(secao)), href: '' });
+                }
+                if (blocosDePrazo.includes(no)) {
+                  eventos.push({ tipo: 'periodo', origem: 'bloco', texto: extrairPrazo(limpar(no)), href: '' });
+                  continue;
+                }
+                if (no.matches('.modtype_label')) {
+                  const prazo = extrairPrazo(limpar(no));
+                  if (prazo) eventos.push({ tipo: 'periodo', origem: 'bloco', texto: prazo, href: '' });
+                  continue;
+                }
+                const link = no.querySelector('a[href*="/mod/"]');
+                const href = link ? link.href : '';
+                const modulo = moduloDe(no, href);
+                if (!modulo || APOIO.has(modulo)) continue;
+                const titulo = tituloDe(no);
+                if (!titulo) continue;
+                const prazo = extrairPrazo(limpar(no.querySelector('.activity-dates, .activity-information, .availabilityinfo')))
+                  || extrairPrazo(limpar(no));
+                if (prazo) eventos.push({ tipo: 'periodo', origem: 'bloco', texto: prazo, href: '' });
+                eventos.push({ tipo: 'atividade', origem: modulo, texto: titulo, href });
+              }
+
+              const jaVistas = new Set(eventos.filter((e) => e.tipo === 'atividade' && e.href).map((e) => e.href));
+              eventos.push({ tipo: 'periodo', origem: 'secao', texto: '', href: '' });
+              document.querySelectorAll('.courseindex a[href*="/mod/"], #course-index a[href*="/mod/"]').forEach((link) => {
+                if (jaVistas.has(link.href)) return;
+                const item = link.closest('li, .courseindex-item') || link;
+                const modulo = moduloDe(item, link.href);
+                if (!modulo || APOIO.has(modulo)) return;
+                const titulo = limpar(link);
+                if (!titulo) return;
+                jaVistas.add(link.href);
+                eventos.push({ tipo: 'atividade', origem: modulo, texto: titulo, href: link.href });
+              });
+              return eventos;
+            }
+            """;
     private static final Pattern SALA_ONLINE_LINK = Pattern.compile("Sala Online \\(\\d{4}\\)");
 
     @Autowired
@@ -124,6 +241,7 @@ public class ScrapperService {
                 salaOnline.locator("div.card-course[data-course-id]").first().waitFor(
                         new Locator.WaitForOptions().setTimeout(60_000)
                 );
+                revelarCardsDaSala(salaOnline);
 
                 // Lista de tarefas encontradas 
                 List<Task> tarefasEncontradas = new ArrayList<>();
@@ -134,14 +252,14 @@ public class ScrapperService {
                 int quantidadeMaterias = disciplinas.size();
 
                 System.out.println("[Playwright] Matérias encontradas: " + quantidadeMaterias);
-                atualizarSyncMensagem("Encontradas " + quantidadeMaterias + " disciplinas. Lendo cronogramas…");
+                atualizarSyncMensagem("Encontradas " + quantidadeMaterias + " disciplinas. Lendo atividades…");
 
                 // Variável para contar o índice da disciplina atual 
                 int indice = 0;
                 // Loop para percorrer todas disciplinas encontradas
                 for (DisciplinaPortal disciplina : disciplinas) {
                     indice++;
-                    atualizarSyncMensagem("Cronograma " + indice + " de " + quantidadeMaterias + ": " + disciplina.nome());
+                    atualizarSyncMensagem("Disciplina " + indice + " de " + quantidadeMaterias + ": " + disciplina.nome());
                     System.out.println("[Playwright] Processando curso: " + disciplina.nome());
                     
                     // Navega para a página da disciplina 
@@ -150,60 +268,13 @@ public class ScrapperService {
                     salaOnline.waitForLoadState();
                     // Espera 800ms para garantir que a página foi carregada 
                     salaOnline.waitForTimeout(800);
+                    aguardarConteudoDaDisciplina(salaOnline);
 
                     // Pega o nome da disciplina 
                     String nomeMateria = resolverNomeDisciplina(salaOnline, disciplina);
 
-                    // Pega o link do cronograma da disciplina  
-                    ElementHandle linkCronograma = salaOnline.querySelector("h3.overviewCard-title a[title='Cronograma']");
-                    
-                    if (linkCronograma == null) {
-                        if (!disciplina.administrativa()) {
-                            System.out.println("[Playwright] Nenhum cronograma encontrado para a matéria: " + nomeMateria);
-                        }
-                        continue;
-                    }
-
-                    // Clica no link do cronograma 
-                    linkCronograma.click();
-                    // Espera carregamento da página do sala online 
-                    salaOnline.waitForLoadState();
-
-                    // Pega cada linha do cronograma 
-                    List<ElementHandle> linhasCronograma = salaOnline.querySelectorAll("ul.content_cronogramadv");
-
-                    // Loop para percorrer cada linha encontrada do cronograma  
-                    for (ElementHandle linha : linhasCronograma) {
-                        // Pega cada coluna da linha 
-                        List<ElementHandle> colunas = linha.querySelectorAll("li");
-                        
-                        // Verifica se o número de colunas é maior ou igual a 3 
-                        // Colunas: atividade, data de início e data de término
-                        if (colunas.size() >= 3) {
-
-                            List<String> textos = new ArrayList<>();
-                            for (ElementHandle coluna : colunas) {
-                                textos.add(normalizarTexto(coluna.innerText()));
-                            }
-
-                            String tituloAtividade = textos.get(0);
-                            if (tituloAtividade.isBlank()) {
-                                continue;
-                            }
-
-                            CronogramaDatas.Periodo periodo = CronogramaDatas.interpretar(textos);
-                            if (periodo != null) {
-                                LocalDateTime inicio = periodo.inicio().atStartOfDay();
-                                LocalDateTime prazoFinal = periodo.fim().atTime(23, 59);
-                                String urlCronograma = salaOnline.url();
-                                Task task = new Task(tituloAtividade, nomeMateria, inicio, prazoFinal, urlCronograma, ra);
-                                tarefasEncontradas.add(task);
-
-                                System.out.println(" [Playwright] Atividade Encontrada: " + tituloAtividade
-                                        + " | Início: " + periodo.inicio() + " | Término: " + periodo.fim());
-                            }
-                        }
-                    }
+                    // Extrai os questionários da disciplina 
+                    tarefasEncontradas.addAll(extrairQuestionarios(salaOnline, nomeMateria, ra));
 
                     salaOnline.navigate(paginaCursosUrl);
                     salaOnline.waitForLoadState();
@@ -290,6 +361,20 @@ public class ScrapperService {
         }
     }
 
+    private void revelarCardsDaSala(Page salaOnline) {
+        int anterior = -1;
+        for (int tentativa = 0; tentativa < 6; tentativa++) {
+            int atual = salaOnline.locator("div.card-course[data-course-id]").count();
+            salaOnline.evaluate("() => window.scrollTo(0, document.body.scrollHeight)");
+            salaOnline.waitForTimeout(400);
+            if (atual > 0 && atual == anterior) {
+                break;
+            }
+            anterior = atual;
+        }
+        salaOnline.evaluate("() => window.scrollTo(0, 0)");
+    }
+
     private List<DisciplinaPortal> listarDisciplinas(Page salaOnline) {
         Set<String> urlsVistas = new LinkedHashSet<>();
         List<DisciplinaPortal> disciplinas = new ArrayList<>();
@@ -304,7 +389,6 @@ public class ScrapperService {
             if (href == null || href.isBlank() || !urlsVistas.add(href)) {
                 continue;
             }
-            // Cronograma CEUB (overviewCard) fica nas salas salaonline.ceub.br
             if (!href.contains("salaonline.ceub.br")) {
                 continue;
             }
@@ -316,11 +400,64 @@ public class ScrapperService {
             if (nome.isBlank()) {
                 nome = "Curso " + card.getAttribute("data-course-id");
             }
-            boolean administrativa = nome.toLowerCase().contains("coordenação")
-                    || nome.toLowerCase().contains("coordenacao");
-            disciplinas.add(new DisciplinaPortal(href, nome, administrativa));
+            // Adiciona a disciplina à lista de disciplinas 
+            disciplinas.add(new DisciplinaPortal(href, nome));
         }
         return disciplinas;
+    }
+
+    private void aguardarConteudoDaDisciplina(Page salaOnline) {
+        try {
+            salaOnline.locator("li.section, .activity").first()
+                    .waitFor(new Locator.WaitForOptions().setTimeout(8_000));
+        } catch (TimeoutError ignored) {
+            System.out.println("[Playwright] Conteúdo da disciplina não apareceu a tempo: " + salaOnline.url());
+        }
+    }
+
+    private List<Task> extrairQuestionarios(Page salaOnline, String nomeMateria, String ra) {
+        List<Task> tarefas = new ArrayList<>();
+        for (QuestionariosSala.Extraido questionario : QuestionariosSala.interpretar(lerAtividades(salaOnline))) {
+            String url = questionario.href().isBlank() ? salaOnline.url() : questionario.href();
+            tarefas.add(new Task(
+                    questionario.titulo(),
+                    nomeMateria,
+                    questionario.inicio(),
+                    questionario.fim(),
+                    url,
+                    ra
+            ));
+            System.out.println(" [Playwright] Atividade encontrada: " + questionario.titulo()
+                    + " | Início: " + questionario.inicio() + " | Término: " + questionario.fim());
+        }
+        if (tarefas.isEmpty()) {
+            System.out.println("[Playwright] Nenhuma atividade encontrada em: " + nomeMateria);
+        }
+        return tarefas;
+    }
+
+    private List<QuestionariosSala.Evento> lerAtividades(Page salaOnline) {
+        Object bruto = salaOnline.evaluate(SCRIPT_ATIVIDADES);
+        if (!(bruto instanceof List<?> lista)) {
+            return List.of();
+        }
+        List<QuestionariosSala.Evento> eventos = new ArrayList<>();
+        for (Object item : lista) {
+            if (!(item instanceof Map<?, ?> mapa)) {
+                continue;
+            }
+            eventos.add(new QuestionariosSala.Evento(
+                    textoEvento(mapa.get("tipo")),
+                    textoEvento(mapa.get("origem")),
+                    textoEvento(mapa.get("texto")),
+                    textoEvento(mapa.get("href"))
+            ));
+        }
+        return eventos;
+    }
+
+    private static String textoEvento(Object valor) {
+        return valor == null ? "" : valor.toString();
     }
 
     private String resolverNomeDisciplina(Page salaOnline, DisciplinaPortal disciplina) {
@@ -334,7 +471,7 @@ public class ScrapperService {
             Locator titulo = salaOnline.locator(seletor).first();
             if (titulo.count() > 0) {
                 String texto = normalizarTexto(titulo.innerText());
-                if (!texto.isBlank() && !texto.equalsIgnoreCase("cronograma")) {
+                if (!texto.isBlank()) {
                     return texto;
                 }
             }
@@ -363,6 +500,6 @@ public class ScrapperService {
                 .trim();
     }
 
-    private record DisciplinaPortal(String url, String nome, boolean administrativa) {}
+    private record DisciplinaPortal(String url, String nome) {}
 }
 

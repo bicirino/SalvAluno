@@ -12,8 +12,8 @@ Este projeto nasceu da necessidade de centralizar e automatizar a gestão de tar
 2. **Sessão**: O servidor cria a sessão (`SALVALUNO_SESSION`) e o dashboard exibe **Olá, [nome]!**.
 3. **Gatilho (API REST)**: Com sessão ativa, o usuário aciona `POST /api/tasks/sync`.
 4. **Automação (Playwright)**: O `ScrapperService` usa o **RA e a senha da conta logada** (não variáveis de ambiente) para login no portal em *headless mode*.
-5. **Extração de Cronograma**: O robô navega pelas disciplinas, acede às páginas de **Cronograma** e mapeia as linhas (`ul.content_cronogramadv`).
-6. **Tratamento e Parsing**: Datas `DD/MM/YY` viram `LocalDateTime`.
+5. **Extração das salas**: O robô abre cada disciplina e percorre as atividades. Só questionários viram tarefa; o prazo vem do bloco Aberto/Fechado da seção.
+6. **Tratamento e Parsing**: Essas datas viram `LocalDateTime`.
 7. **Persistência**: Tarefas são salvas com `ownerRa` do aluno; sync substitui as tarefas daquele RA via `TaskStore`.
 8. **Consulta**: `GET /api/tasks` devolve apenas as tarefas do aluno autenticado.
 
