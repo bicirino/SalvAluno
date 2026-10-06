@@ -52,7 +52,8 @@ public class TaskController {
         return ResponseEntity.ok(new SyncStatusResponse(
                 scrapperService.isSyncEmAndamento(),
                 scrapperService.getSyncMensagem(),
-                taskRepository.countByOwnerRa(aluno.getRa())
+                taskRepository.countByOwnerRa(aluno.getRa()),
+                scrapperService.getUltimaSyncResultado()
         ));
     }
 

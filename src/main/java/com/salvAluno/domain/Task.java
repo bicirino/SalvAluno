@@ -17,6 +17,7 @@ public class Task {
 	private Long id;
 	private String title;
 	private String subject;
+	private LocalDateTime startDate;
 	private LocalDateTime dueDate;
 	private String url;
 	private String ownerRa;
@@ -26,9 +27,10 @@ public class Task {
 	}
 
     // Construtor público para criar uma nova instância de Task com os atributos fornecidos
-	public Task(String title, String subject, LocalDateTime dueDate, String url, String ownerRa) {
+	public Task(String title, String subject, LocalDateTime startDate, LocalDateTime dueDate, String url, String ownerRa) {
 		this.title = title;
 		this.subject = subject;
+		this.startDate = startDate;
 		this.dueDate = dueDate;
 		this.url = url;
 		this.ownerRa = ownerRa;
@@ -44,6 +46,10 @@ public class Task {
 
 	public String getSubject() {
 		return subject;
+	}
+
+	public LocalDateTime getStartDate() {
+		return startDate;
 	}
 
 	public LocalDateTime getDueDate() {
