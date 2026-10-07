@@ -14,19 +14,22 @@ import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 import java.util.Base64;
 
-/**
- * Cifra a senha do portal em repouso. A chave fica fora do banco, em arquivo local.
- */
+
+// Cifra a senha do portal em repouso. A chave fica fora do banco, em arquivo local.
 @Component
 public class CredentialCipher {
 
+	// Tamanho da chave de criptografia 
 	private static final int KEY_BYTES = 32;
 	private static final int IV_BYTES = 12;
 	private static final int TAG_BITS = 128;
 
+	// Chave de criptografia (armazenada em arquivo local) 
 	private final SecretKey key;
+	// Gerador de números aletórios
 	private final SecureRandom random = new SecureRandom();
 
+	// Construtor que carrega a chave de criptografia do arquivo local
 	public CredentialCipher(@Value("${app.crypto.key-path:data/crypto.key}") String keyPath) throws IOException {
 		this.key = new SecretKeySpec(loadOrCreateKey(Path.of(keyPath)), "AES");
 	}

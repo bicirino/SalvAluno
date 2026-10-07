@@ -34,14 +34,16 @@ public class ScrapperService {
     // Versão do scrapper para fins de controle de versão 
     private static final String SCRAPER_VERSION = "3.5.0";
 
-    /** Percorre a sala inteira e separa atividade de material de apoio. */
+    // Script JS para extrair as atividades da sala online 
+    // Este script rodará no contexto da aba da sala online - o Java não pode fazer isso diretamente. 
     private static final String SCRIPT_ATIVIDADES = """
             () => {
               const limpar = (el) => {
                 if (!el) return '';
                 const clone = el.cloneNode(true);
-                clone.querySelectorAll('.accesshide, .sr-only').forEach((n) => n.remove());
-                return (clone.innerText || '').replace(/\\s+/g, ' ').trim();
+                clone.querySelectorAll('.accesshide, .sr-only, script, style').forEach((n) => n.remove());
+                // textContent funciona no clone; innerText sai vazio fora do documento e apagava o prazo.
+                return (clone.textContent || '').replace(/\\s+/g, ' ').trim();
               };
               const APOIO = new Set(['resource', 'url', 'folder', 'page', 'book', 'label', 'imscp']);
               const raizAtividade = (el) => !(el.parentElement && el.parentElement.closest('li.activity, div.activity, .activity-item'));
